@@ -1,0 +1,6 @@
+<?php
+require_once __DIR__ . '/../app/helpers/auth.php'; require_once __DIR__ . '/../app/config/database.php'; require_role(['admin','recruiter']);
+$pdo=Database::connect(); $rows=$pdo->query("SELECT c.id, c.application_no, c.full_name, c.position_applied, c.current_status, c.applied_at,(SELECT recommendation FROM interview_feedback f WHERE f.candidate_id=c.id ORDER BY f.id DESC LIMIT 1) latest_feedback FROM candidates c ORDER BY c.id DESC")->fetchAll(PDO::FETCH_ASSOC);
+$title='Candidates'; include __DIR__ . '/../app/views/layouts/header.php'; ?>
+<div class="section-title"><h2>All Candidates</h2><span class="pill"><?= count($rows) ?> records</span></div><div class="card"><table><thead><tr><th>App No</th><th>Name</th><th>Position</th><th>Status</th><th>Latest Feedback</th><th>Action</th></tr></thead><tbody><?php foreach($rows as $r): ?><tr><td><?= h($r['application_no']) ?></td><td><?= h($r['full_name']) ?></td><td><?= h($r['position_applied']) ?></td><td><?= h($r['current_status']) ?></td><td><?= h($r['latest_feedback'] ?: '-') ?></td><td><a class="btn btn-outline" href="recruiter-candidate.php?id=<?= (int)$r['id'] ?>">Open</a></td></tr><?php endforeach; ?></tbody></table></div>
+<?php include __DIR__ . '/../app/views/layouts/footer.php'; ?>

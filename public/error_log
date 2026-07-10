@@ -1,0 +1,5 @@
+[09-Jul-2026 13:15:09 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'action_by' cannot be null in /home/vinaykalra/careers.unire.co.in/recruitment-system/public/apply.php:15
+Stack trace:
+#0 /home/vinaykalra/careers.unire.co.in/recruitment-system/public/apply.php(15): PDOStatement->execute()
+#1 {main}
+  thrown in /home/vinaykalra/careers.unire.co.in/recruitment-system/public/apply.php on line 15
