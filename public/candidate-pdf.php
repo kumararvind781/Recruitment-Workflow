@@ -2,24 +2,26 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+session_start();
+
 require_once __DIR__ . '/../app/helpers/auth.php';
 require_once __DIR__ . '/../app/config/database.php';
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 require_role(['admin', 'recruiter', 'manager']);
 
 $pdo = Database::connect();
-$id = (int)($_GET['id'] ?? 0);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+$id = (int) ($_GET['id'] ?? 0);
 if ($id <= 0) {
     exit('Invalid candidate ID');
 }
 
-$stmt = $pdo->prepare("
-    SELECT c.*
-    FROM candidates c
-    WHERE c.id = ?
-    LIMIT 1
-");
+$stmt = $pdo->prepare("SELECT * FROM candidates WHERE id = ? LIMIT 1");
 $stmt->execute([$id]);
 $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -27,378 +29,695 @@ if (!$candidate) {
     exit('Candidate not found');
 }
 
-$feedbackRows = [];
-try {
-    $feedbackStmt = $pdo->prepare("
-        SELECT f.*, u.full_name AS manager_name
-        FROM interview_feedback f
-        LEFT JOIN users u ON u.id = f.manager_id
-        WHERE f.candidate_id = ?
-        ORDER BY f.id DESC
-    ");
-    $feedbackStmt->execute([$id]);
-    $feedbackRows = $feedbackStmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $feedbackRows = [];
+$academicStmt = $pdo->prepare("SELECT * FROM candidate_academics WHERE candidate_id = ? ORDER BY id ASC");
+$academicStmt->execute([$id]);
+$academics = $academicStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$experienceStmt = $pdo->prepare("SELECT * FROM candidate_experiences WHERE candidate_id = ? ORDER BY id ASC");
+$experienceStmt->execute([$id]);
+$experiences = $experienceStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$referenceStmt = $pdo->prepare("SELECT * FROM candidate_references WHERE candidate_id = ? ORDER BY id ASC");
+$referenceStmt->execute([$id]);
+$references = $referenceStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$familyStmt = $pdo->prepare("SELECT * FROM candidate_family_details WHERE candidate_id = ? ORDER BY id ASC");
+$familyStmt->execute([$id]);
+$familyDetails = $familyStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$statusStmt = $pdo->prepare("SELECT * FROM candidate_status_logs WHERE candidate_id = ? ORDER BY id DESC");
+$statusStmt->execute([$id]);
+$statusLogs = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$roundStmt = $pdo->prepare("SELECT * FROM interview_rounds WHERE candidate_id = ? ORDER BY id DESC");
+$roundStmt->execute([$id]);
+$rounds = $roundStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$feedbackStmt = $pdo->prepare("SELECT * FROM interview_feedback WHERE candidate_id = ? ORDER BY id DESC");
+$feedbackStmt->execute([$id]);
+$feedbacks = $feedbackStmt->fetchAll(PDO::FETCH_ASSOC);
+
+function e($value)
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-$roundRows = [];
-try {
-    $roundStmt = $pdo->prepare("
-        SELECT ir.*, u.full_name AS manager_name
-        FROM interview_rounds ir
-        LEFT JOIN users u ON u.id = ir.manager_id
-        WHERE ir.candidate_id = ?
-        ORDER BY ir.id ASC
-    ");
-    $roundStmt->execute([$id]);
-    $roundRows = $roundStmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $roundRows = [];
-}
-
-$timelineRows = [];
-try {
-    $timelineStmt = $pdo->prepare("
-        SELECT sl.*, u.full_name AS action_user
-        FROM status_logs sl
-        LEFT JOIN users u ON u.id = sl.action_by
-        WHERE sl.candidate_id = ?
-        ORDER BY sl.id ASC
-    ");
-    $timelineStmt->execute([$id]);
-    $timelineRows = $timelineStmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $timelineRows = [];
-}
-
-$generatedBy = $_SESSION['user']['name'] ?? 'System User';
-$generatedDate = date('d-m-Y h:i A');
-
-function e($value) {
-    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
-}
-
-/* dynamic base url for localhost + live */
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host   = $_SERVER['HTTP_HOST'];
-$scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
-$scriptDir = rtrim($scriptDir, '/');
-
-$projectBase = $scheme . '://' . $host;
-
-/* detect localhost project folder */
-if (stripos($host, 'localhost') !== false || stripos($host, '127.0.0.1') !== false) {
-    $publicPos = stripos($scriptDir, '/public');
-    if ($publicPos !== false) {
-        $projectRoot = substr($scriptDir, 0, $publicPos + 7);
-    } else {
-        $projectRoot = $scriptDir;
+function tableOrEmpty(array $rows, callable $renderer, int $colspan)
+{
+    if (!$rows) {
+        return '<tr><td colspan="' . $colspan . '">No records found.</td></tr>';
     }
-    $baseUrl = $projectBase . $projectRoot . '/';
-} else {
-    $baseUrl = $projectBase . '/';
+
+    $html = '';
+    foreach ($rows as $row) {
+        $html .= $renderer($row);
+    }
+    return $html;
 }
 
-$photoUrl = '';
-if (!empty($candidate['photo_path'])) {
-    $photoPath = ltrim($candidate['photo_path'], '/');
-    $photoUrl = $baseUrl . $photoPath;
-    $photoUrl = str_replace('/public/uploads/', '/uploads/', $photoUrl);
-    $photoUrl = preg_replace('#(?<!:)/{2,}#', '/', $photoUrl);
-    $photoUrl = str_replace(':/', '://', $photoUrl);
+$logoBase64 = '';
+$candidatePhotoBase64 = '';
+
+$logoPath = __DIR__ . '/assets/logo.png';
+if (file_exists($logoPath)) {
+    $logoExt = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
+    $logoMime = $logoExt === 'jpg' || $logoExt === 'jpeg' ? 'jpeg' : 'png';
+    $logoBase64 = 'data:image/' . $logoMime . ';base64,' . base64_encode(file_get_contents($logoPath));
 }
+
+if (!empty($candidate['photo_path'])) {
+    $photoFileName = basename($candidate['photo_path']);
+    $photoPath = __DIR__ . '/uploads/candidates/' . $photoFileName;
+
+    if (file_exists($photoPath)) {
+        $photoExt = strtolower(pathinfo($photoPath, PATHINFO_EXTENSION));
+        $photoMime = $photoExt === 'jpg' || $photoExt === 'jpeg' ? 'jpeg' : 'png';
+        $candidatePhotoBase64 = 'data:image/' . $photoMime . ';base64,' . base64_encode(file_get_contents($photoPath));
+    }
+}
+ob_start();
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Candidate Detail PDF</title>
+    <title>Candidate Summary PDF</title>
     <style>
-        body{
-            font-family: Arial, sans-serif;
-            color:#222;
-            margin:0;
-            background:#f5f5f5;
+        body {
+            font-family: DejaVu Sans, sans-serif;
+            font-size: 12px;
+            color: #222;
+            line-height: 1.45;
         }
-        .page{
-            width:900px;
-            margin:20px auto;
-            background:#fff;
-            padding:30px;
-            border:1px solid #ddd;
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 10px;
+            color: #7d2562;
         }
-        .header{
-            text-align:center;
-            border-bottom:2px solid #444;
-            padding-bottom:12px;
-            margin-bottom:20px;
+
+        h2 {
+            font-size: 15px;
+            margin: 22px 0 8px;
+            padding: 6px 10px;
+            background: #f4e7f0;
+            color: #6f2359;
+            border: 1px solid #e5cfe0;
         }
-        .header h1{
-            margin:0;
-            font-size:24px;
-            letter-spacing:0.5px;
+
+        .meta {
+            margin-bottom: 16px;
+            font-size: 12px;
         }
-        .header p{
-            margin:6px 0 0;
-            font-size:15px;
+
+        .meta strong {
+            color: #000;
         }
-        .section{
-            margin-bottom:24px;
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
         }
-        .section h2{
-            font-size:18px;
-            margin:0 0 10px;
-            padding-bottom:6px;
-            border-bottom:1px solid #ccc;
+
+        th,
+        td {
+            border: 1px solid #cfcfcf;
+            padding: 7px 8px;
+            text-align: left;
+            vertical-align: top;
+            word-wrap: break-word;
         }
-        table{
-            width:100%;
-            border-collapse:collapse;
-            margin-top:10px;
+
+        th {
+            background: #f7f7f7;
+            font-weight: bold;
         }
-        table th, table td{
-            border:1px solid #ccc;
-            padding:8px;
-            font-size:14px;
-            vertical-align:top;
-            text-align:left;
+
+        .two-col td:first-child,
+        .two-col th:first-child {
+            width: 28%;
+            background: #fafafa;
+            font-weight: bold;
         }
-        .footer{
-            margin-top:30px;
-            padding-top:12px;
-            border-top:2px solid #444;
-            font-size:14px;
+
+        .section {
+            margin-bottom: 12px;
         }
-        .print-btn{
-            width:900px;
-            margin:20px auto 0;
-            text-align:right;
+
+        .small {
+            font-size: 11px;
+            color: #555;
         }
-        .print-btn button{
-            background:#b8328a;
-            color:#fff;
-            border:none;
-            padding:10px 16px;
-            border-radius:6px;
-            cursor:pointer;
-            font-size:14px;
+
+        .report-header {
+            width: 100%;
+            margin-bottom: 20px;
         }
-        .photo-box{
-            width:140px;
-            height:160px;
-            object-fit:cover;
-            border:1px solid #ccc;
-            display:block;
-            margin:0 auto;
+
+        .report-header-table {
+            width: 100%;
+            border: 0;
         }
-        .photo-empty{
-            width:140px;
-            height:160px;
-            border:1px solid #ccc;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            margin:0 auto;
-            font-size:14px;
-            color:#666;
+
+        .report-header-table td {
+            border: 0;
+            vertical-align: top;
+            padding: 0;
         }
-        .small-text{
-            font-size:12px;
-            color:#666;
-            word-break:break-all;
+
+        .report-title-cell {
+            width: 75%;
         }
-        @media print{
-            .print-btn{ display:none; }
-            body{ background:#fff; }
-            .page{
-                margin:0 auto;
-                border:none;
-                width:100%;
-            }
+
+        .report-logo-cell {
+            width: 25%;
+            text-align: right;
+        }
+
+        .report-logo {
+            max-width: 130px;
+            max-height: 100px;
+        }
+
+        .report-logo img {
+            max-width: 130px;
+            max-height: 100px;
+        }
+
+        /* new css header  */
+
+        .report-header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 18px;
+        }
+
+        .report-header-table td {
+            border: 0;
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .header-photo-col {
+            width: 28%;
+            padding-right: 18px;
+        }
+
+        .header-detail-col {
+            width: 72%;
+        }
+
+        .candidate-photo-box {
+            width: 150px;
+            height: 180px;
+            border: 1px solid #d7c5d1;
+            padding: 6px;
+            text-align: center;
+        }
+
+        .candidate-photo-box img {
+            width: 136px;
+            height: 166px;
+            object-fit: cover;
+        }
+
+        .no-photo {
+            width: 136px;
+            height: 166px;
+            line-height: 166px;
+            text-align: center;
+            background: #f7f7f7;
+            color: #777;
+            font-size: 12px;
+        }
+
+        .right-top-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        .right-top-table td {
+            border: 0;
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .report-title-cell {
+            width: 72%;
+            padding-right: 10px;
+        }
+
+        .report-logo-cell {
+            width: 28%;
+            text-align: right;
+        }
+
+        .report-logo {
+            max-width: 110px;
+            max-height: 80px;
+        }
+
+        .report-logo img {
+            max-width: 110px;
+            max-height: 80px;
+        }
+
+        .detail-lines {
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.7;
+        }
+
+        .detail-lines strong {
+            color: #000;
         }
     </style>
 </head>
+
 <body>
 
-<div class="print-btn">
-    <button onclick="window.print()">Print / Save PDF</button>
-</div>
-
-<div class="page">
-    <div class="header">
-        <h1>UNIRE BUSINESS SOLUTIONS</h1>
-        <p>Recruitment Workflow Report</p>
-    </div>
-
-    <div class="section">
-        <h2>Candidate Information</h2>
-
-        <table>
-            <tr>
-                <td style="width:180px; text-align:center; vertical-align:top;">
-                    <?php if (!empty($photoUrl)): ?>
-                        <img src="<?= e($photoUrl) ?>" alt="Candidate Photo" class="photo-box">
+    <table class="report-header-table">
+        <tr>
+            <td class="header-photo-col">
+                <div class="candidate-photo-box">
+                    <?php if ($candidatePhotoBase64): ?>
+                        <img src="<?= $candidatePhotoBase64 ?>" alt="Candidate Photo">
                     <?php else: ?>
-                        <div class="photo-empty">No Photo</div>
+                        <div class="no-photo">No Photo</div>
                     <?php endif; ?>
-                </td>
+                </div>
+            </td>
 
-                <td>
-                    <table>
-                        <tr>
-                            <th style="width:180px;">Application No</th>
-                            <td><?= e($candidate['application_no'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Full Name</th>
-                            <td><?= e($candidate['full_name'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Email</th>
-                            <td><?= e($candidate['email'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Phone</th>
-                            <td><?= e($candidate['phone'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Position Applied</th>
-                            <td><?= e($candidate['position_applied'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Current Status</th>
-                            <td><?= e($candidate['current_status'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Applied At</th>
-                            <td><?= e($candidate['applied_at'] ?? '-') ?></td>
-                        </tr>
-                        <tr>
-                            <th>Resume File</th>
-                            <td><?= !empty($candidate['resume_path']) ? e(basename($candidate['resume_path'])) : '-' ?></td>
-                        </tr>
-                        <tr>
-                            <th>Photo URL</th>
-                            <td class="small-text"><?= e($photoUrl ?: '-') ?></td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2>Recruiter Information</h2>
-        <table>
-            <tr>
-                <th style="width:180px;">Source Type</th>
-                <td><?= e($candidate['source_type'] ?? '-') ?></td>
-            </tr>
-            <tr>
-                <th>Reference Name</th>
-                <td><?= e($candidate['source_reference_name'] ?? '-') ?></td>
-            </tr>
-            <tr>
-                <th>Final Decision</th>
-                <td><?= e($candidate['final_decision'] ?? '-') ?></td>
-            </tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2>Manager Feedback</h2>
-        <?php if ($feedbackRows): ?>
-            <table>
-                <tr>
-                    <th>Manager</th>
-                    <th>Recommendation</th>
-                    <th>Remark</th>
-                    <th>Date</th>
-                </tr>
-                <?php foreach ($feedbackRows as $row): ?>
+            <td class="header-detail-col">
+                <table class="right-top-table">
                     <tr>
-                        <td><?= e($row['manager_name'] ?? '-') ?></td>
-                        <td><?= e($row['recommendation'] ?? '-') ?></td>
-                        <td><?= e($row['remark_text'] ?? '-') ?></td>
-                        <td><?= e($row['created_at'] ?? '-') ?></td>
+                        <td class="report-title-cell">
+                            <h1>Candidate Summary Report</h1>
+                        </td>
+                        <td class="report-logo-cell">
+                            <?php if ($logoBase64): ?>
+                                <img class="report-logo" src="<?= $logoBase64 ?>" alt="Company Logo">
+                            <?php endif; ?>
+                        </td>
                     </tr>
-                <?php endforeach; ?>
-            </table>
-        <?php else: ?>
-            <p>No manager feedback available.</p>
-        <?php endif; ?>
-    </div>
+                </table>
 
-    <div class="section">
-        <h2>Interview Round History</h2>
-        <?php if ($roundRows): ?>
-            <table>
-                <tr>
-                    <th>Round</th>
-                    <th>Manager</th>
-                    <th>Status</th>
-                    <th>Scheduled At</th>
-                </tr>
-                <?php foreach ($roundRows as $row): ?>
-                    <tr>
-                        <td><?= e($row['round_name'] ?? '-') ?></td>
-                        <td><?= e($row['manager_name'] ?? '-') ?></td>
-                        <td><?= e($row['interview_status'] ?? '-') ?></td>
-                        <td><?= e($row['scheduled_at'] ?? '-') ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </table>
-        <?php else: ?>
-            <p>No interview rounds available.</p>
-        <?php endif; ?>
-    </div>
+                <div class="detail-lines">
+                    <strong>Application No:</strong> <?= e($candidate['application_no'] ?? '') ?><br>
+                    <strong>Candidate Name:</strong> <?= e($candidate['full_name'] ?? '') ?><br>
+                    <strong>Email:</strong> <?= e($candidate['email'] ?? '') ?><br>
+                    <strong>Phone:</strong> <?= e($candidate['phone'] ?? '') ?><br>
+                    <strong>Position Applied:</strong> <?= e($candidate['position_applied'] ?? '') ?><br>
+                    <strong>Department:</strong> <?= e($candidate['department'] ?? '') ?><br>
+                    <strong>Current Status:</strong> <?= e($candidate['current_status'] ?? 'submitted') ?><br>
+                    <strong>Final Decision:</strong> <?= e($candidate['final_decision'] ?? 'pending') ?><br>
+                    
+                </div>
+            </td>
+        </tr>
+    </table>
 
-    <div class="section">
-        <h2>Status Timeline</h2>
-        <?php if ($timelineRows): ?>
-            <table>
-                <tr>
-                    <th>Old Status</th>
-                    <th>New Status</th>
-                    <th>Action By</th>
-                    <th>Note</th>
-                    <th>Date</th>
-                </tr>
-                <?php foreach ($timelineRows as $row): ?>
-                    <tr>
-                        <td><?= e($row['old_status'] ?? '-') ?></td>
-                        <td><?= e($row['new_status'] ?? '-') ?></td>
-                        <td><?= e($row['action_user'] ?? '-') ?></td>
-                        <td><?= e($row['note'] ?? '-') ?></td>
-                        <td><?= e($row['created_at'] ?? '-') ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </table>
-        <?php else: ?>
-            <p>No status timeline available.</p>
-        <?php endif; ?>
-    </div>
+    <h2>User Info</h2>
+    <table class="two-col">
+        <tr>
+            <td>Full Name</td>
+            <td><?= e($candidate['full_name'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Email</td>
+            <td><?= e($candidate['email'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Phone</td>
+            <td><?= e($candidate['phone'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Alternate Phone</td>
+            <td><?= e($candidate['alternate_phone'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Father / Husband Name</td>
+            <td><?= e($candidate['father_husband_name'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Emergency No</td>
+            <td><?= e($candidate['emergency_no'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Date of Birth</td>
+            <td><?= e($candidate['dob'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Age</td>
+            <td><?= e($candidate['age'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Gender</td>
+            <td><?= e($candidate['gender'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Marital Status</td>
+            <td><?= e($candidate['marital_status'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Highest Qualification</td>
+            <td><?= e($candidate['highest_qualification'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Total Experience</td>
+            <td><?= e($candidate['total_experience'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Current Company</td>
+            <td><?= e($candidate['current_company'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Current Salary</td>
+            <td><?= e($candidate['current_salary'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Expected Salary</td>
+            <td><?= e($candidate['expected_salary'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Position Applied</td>
+            <td><?= e($candidate['position_applied'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Department</td>
+            <td><?= e($candidate['department'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Notice Period</td>
+            <td><?= e($candidate['notice_period'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Notice Specify</td>
+            <td><?= e($candidate['notice_period_specify'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Source Type</td>
+            <td><?= e($candidate['source_type'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Source Reference Name</td>
+            <td><?= e($candidate['source_reference_name'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Current Address</td>
+            <td><?= nl2br(e($candidate['address'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Permanent Address</td>
+            <td><?= nl2br(e($candidate['permanent_address'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>City</td>
+            <td><?= e($candidate['city'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>State</td>
+            <td><?= e($candidate['state'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Pincode</td>
+            <td><?= e($candidate['pincode'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Career Goals</td>
+            <td><?= nl2br(e($candidate['career_goals'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Interest in Field</td>
+            <td><?= nl2br(e($candidate['interest_in_field'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Scheduled Exam</td>
+            <td><?= nl2br(e($candidate['scheduled_exam'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Strengths</td>
+            <td><?= nl2br(e($candidate['strengths'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Weakness</td>
+            <td><?= nl2br(e($candidate['weakness'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>EPF Registered</td>
+            <td><?= e($candidate['epf_registered'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>UAN No</td>
+            <td><?= e($candidate['uan_no'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>ESIC Registered</td>
+            <td><?= e($candidate['esic_registered'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>IP No</td>
+            <td><?= e($candidate['ip_no'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Aadhaar No</td>
+            <td><?= e($candidate['aadhaar_no'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>PAN No</td>
+            <td><?= e($candidate['pan_no'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Bank Account No</td>
+            <td><?= e($candidate['bank_account_no'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>IFSC Code</td>
+            <td><?= e($candidate['ifsc_code'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Weekly Working Days</td>
+            <td><?= e($candidate['weekly_working_days'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Smoking</td>
+            <td><?= e($candidate['smoking'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Self Vehicle</td>
+            <td><?= e($candidate['self_vehicle'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Driving Licence</td>
+            <td><?= e($candidate['driving_licence'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Medical Issue</td>
+            <td><?= nl2br(e($candidate['medical_issue'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Hobbies</td>
+            <td><?= nl2br(e($candidate['hobbies'] ?? '')) ?></td>
+        </tr>
+        <tr>
+            <td>Resume Path</td>
+            <td><?= e($candidate['resume_path'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Photo Path</td>
+            <td><?= e($candidate['photo_path'] ?? '') ?></td>
+        </tr>
+        <tr>
+            <td>Applied At</td>
+            <td><?= e($candidate['applied_at'] ?? '') ?></td>
+        </tr>
+    </table>
 
-    <div class="section">
-        <h2>Final Decision</h2>
-        <table>
+    <h2>Academic Details</h2>
+    <table>
+        <thead>
             <tr>
-                <th style="width:180px;">Decision</th>
-                <td><?= e($candidate['final_decision'] ?? '-') ?></td>
+                <th>Level</th>
+                <th>Subject</th>
+                <th>Institute</th>
+                <th>Passing Year</th>
+                <th>Percentage</th>
             </tr>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($academics, function ($row) {
+                return '<tr>
+                    <td>' . e($row['level_name'] ?? '') . '</td>
+                    <td>' . e($row['subject'] ?? '') . '</td>
+                    <td>' . e($row['institute'] ?? '') . '</td>
+                    <td>' . e($row['passing_year'] ?? '') . '</td>
+                    <td>' . e($row['percentage'] ?? '') . '</td>
+                </tr>';
+            }, 5); ?>
+        </tbody>
+    </table>
+
+    <h2>Experience</h2>
+    <table>
+        <thead>
             <tr>
-                <th>Current Status</th>
-                <td><?= e($candidate['current_status'] ?? '-') ?></td>
+                <th>Company</th>
+                <th>Designation</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Salary (CTC)</th>
+                <th>Reason for Leaving</th>
             </tr>
-        </table>
-    </div>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($experiences, function ($row) {
+                return '<tr>
+                    <td>' . e($row['company_name'] ?? '') . '</td>
+                    <td>' . e($row['designation'] ?? '') . '</td>
+                    <td>' . e($row['from_date'] ?? '') . '</td>
+                    <td>' . e($row['to_date'] ?? '') . '</td>
+                    <td>' . e($row['salary_ctc'] ?? '') . '</td>
+                    <td>' . e($row['reason_for_leaving'] ?? '') . '</td>
+                </tr>';
+            }, 6); ?>
+        </tbody>
+    </table>
 
-    <div class="footer">
-        <p><strong>Generated By:</strong> <?= e($generatedBy) ?></p>
-        <p><strong>Generated Date:</strong> <?= e($generatedDate) ?></p>
-    </div>
-</div>
+    <h2>References</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Designation</th>
+                <th>Email</th>
+                <th>Mobile</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($references, function ($row) {
+                return '<tr>
+                    <td>' . e($row['ref_name'] ?? '') . '</td>
+                    <td>' . e($row['designation'] ?? '') . '</td>
+                    <td>' . e($row['email'] ?? '') . '</td>
+                    <td>' . e($row['mobile'] ?? '') . '</td>
+                </tr>';
+            }, 4); ?>
+        </tbody>
+    </table>
 
+    <h2>Family Details</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Relation</th>
+                <th>Occupation</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($familyDetails, function ($row) {
+                return '<tr>
+                    <td>' . e($row['member_name'] ?? '') . '</td>
+                    <td>' . e($row['relation_name'] ?? '') . '</td>
+                    <td>' . e($row['occupation'] ?? '') . '</td>
+                </tr>';
+            }, 3); ?>
+        </tbody>
+    </table>
+
+    <h2>Interview Rounds</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Round Name</th>
+                <th>Scheduled At</th>
+                <th>Status</th>
+                <th>Note</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($rounds, function ($row) {
+                return '<tr>
+                    <td>' . e($row['round_name'] ?? '') . '</td>
+                    <td>' . e($row['scheduled_at'] ?? '') . '</td>
+                    <td>' . e($row['status'] ?? '') . '</td>
+                    <td>' . nl2br(e($row['note'] ?? '')) . '</td>
+                </tr>';
+            }, 4); ?>
+        </tbody>
+    </table>
+
+    <h2>Manager Feedback</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Recommendation</th>
+                <th>Rating</th>
+                <th>Remarks</th>
+                <th>Submitted At</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($feedbacks, function ($row) {
+                return '<tr>
+                    <td>' . e($row['title'] ?? '') . '</td>
+                    <td>' . e($row['recommendation'] ?? '') . '</td>
+                    <td>' . e($row['rating'] ?? '') . '</td>
+                    <td>' . nl2br(e($row['remarks'] ?? '')) . '</td>
+                    <td>' . e($row['created_at'] ?? '') . '</td>
+                </tr>';
+            }, 5); ?>
+        </tbody>
+    </table>
+
+    <h2>Status History</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Old Status</th>
+                <th>New Status</th>
+                <th>Action Role</th>
+                <th>Note</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?= tableOrEmpty($statusLogs, function ($row) {
+                return '<tr>
+                    <td>' . e($row['old_status'] ?? '') . '</td>
+                    <td>' . e($row['new_status'] ?? '') . '</td>
+                    <td>' . e($row['action_role'] ?? '') . '</td>
+                    <td>' . nl2br(e($row['note'] ?? '')) . '</td>
+                    <td>' . e($row['created_at'] ?? '') . '</td>
+                </tr>';
+            }, 5); ?>
+        </tbody>
+    </table>
+
+    <p class="small" style="margin-top: 20px;">
+        End of candidate summary report.
+        <strong>Generated At:</strong> <?= date('Y-m-d H:i:s') ?>
+    </p>
 </body>
+
 </html>
+<?php
+$html = ob_get_clean();
+
+$options = new Options();
+$options->set('isRemoteEnabled', true);
+$options->set('defaultFont', 'DejaVu Sans');
+
+$dompdf = new Dompdf($options);
+$dompdf->loadHtml($html);
+$dompdf->setPaper('A4', 'portrait');
+$dompdf->render();
+
+$fileName = 'candidate-summary-' . preg_replace('/[^A-Za-z0-9_\-]/', '-', ($candidate['application_no'] ?? (string) $id)) . '.pdf';
+
+$dompdf->stream($fileName, ['Attachment' => false]);
+exit;
