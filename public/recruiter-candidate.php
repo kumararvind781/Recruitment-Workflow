@@ -28,6 +28,85 @@ if (!$candidate) {
     exit('Candidate not found');
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = trim($_POST['action'] ?? '');
+    $note = trim($_POST['note'] ?? '');
+    $managerId = (int) ($_POST['manager_id'] ?? 0);
+    $scheduledAt = trim($_POST['scheduled_at'] ?? '');
+    $scheduledAt = $scheduledAt !== '' ? date('Y-m-d H:i:s', strtotime($scheduledAt)) : null;
+
+    $oldStatus = $candidate['current_status'] ?? 'submitted';
+    $actionBy = $_SESSION['user']['id'] ?? ($_SESSION['user_id'] ?? null);
+    $actionRole = $_SESSION['user']['role'] ?? ($_SESSION['role'] ?? 'recruiter');
+
+    $newStatus = $oldStatus;
+    $finalDecision = $candidate['final_decision'] ?? 'pending';
+    $roundId = null;
+
+    if ($action === 'reject_without_interview') {
+        $newStatus = 'rejected';
+        $finalDecision = 'rejected';
+    } elseif ($action === 'direct_select') {
+        $newStatus = 'selected';
+        $finalDecision = 'selected';
+    } elseif ($action === 'send_to_manager') {
+        if ($managerId <= 0) {
+            exit('Please select manager');
+        }
+
+        $nextRoundNoStmt = $pdo->prepare("SELECT COALESCE(MAX(round_no), 0) + 1 FROM interview_rounds WHERE candidate_id = ?");
+        $nextRoundNoStmt->execute([$id]);
+        $roundNo = (int) $nextRoundNoStmt->fetchColumn();
+
+        $roundName = 'Round ' . $roundNo;
+        $recruiterId = (int) $actionBy;
+
+        $insertRound = $pdo->prepare("
+            INSERT INTO interview_rounds
+            (candidate_id, round_no, round_name, recruiter_id, manager_id, scheduled_at, interview_status)
+            VALUES (?, ?, ?, ?, ?, ?, 'assigned')
+        ");
+        $insertRound->execute([$id, $roundNo, $roundName, $recruiterId, $managerId, $scheduledAt]);
+        $roundId = (int) $pdo->lastInsertId();
+
+        $newStatus = 'sent_to_manager';
+        $finalDecision = 'pending';
+    } elseif ($action === 'final_select') {
+        $newStatus = 'selected';
+        $finalDecision = 'selected';
+    } elseif ($action === 'final_reject') {
+        $newStatus = 'rejected';
+        $finalDecision = 'rejected';
+    }
+
+    if ($newStatus !== $oldStatus || $finalDecision !== ($candidate['final_decision'] ?? 'pending')) {
+        $updateCandidate = $pdo->prepare("
+            UPDATE candidates
+            SET current_status = ?, final_decision = ?
+            WHERE id = ?
+        ");
+        $updateCandidate->execute([$newStatus, $finalDecision, $id]);
+
+        $logStmt = $pdo->prepare("
+            INSERT INTO candidate_status_logs
+            (candidate_id, round_id, action_by, action_role, old_status, new_status, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $logStmt->execute([
+            $id,
+            $roundId,
+            $actionBy,
+            $actionRole,
+            $oldStatus,
+            $newStatus,
+            $note !== '' ? $note : null
+        ]);
+    }
+
+    header('Location: recruiter-candidate.php?id=' . $id);
+    exit;
+}
+
 $academicStmt = $pdo->prepare("SELECT * FROM candidate_academics WHERE candidate_id = ? ORDER BY id ASC");
 $academicStmt->execute([$id]);
 $academics = $academicStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -56,8 +135,16 @@ $feedbackStmt = $pdo->prepare("SELECT * FROM interview_feedback WHERE candidate_
 $feedbackStmt->execute([$id]);
 $feedbacks = $feedbackStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$managerStmt = $pdo->query("SELECT id, full_name FROM users ORDER BY full_name ASC");
+$managerStmt = $pdo->query("
+    SELECT u.id, u.full_name
+    FROM users u
+    INNER JOIN user_roles ur ON ur.user_id = u.id
+    INNER JOIN roles r ON r.id = ur.role_id
+    WHERE r.name = 'manager'
+    ORDER BY u.full_name ASC
+");
 $managers = $managerStmt->fetchAll(PDO::FETCH_ASSOC);
+
 ?>
 
 <style>

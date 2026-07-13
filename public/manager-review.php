@@ -46,9 +46,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($remark !== '') {
         $pdo->prepare("INSERT INTO interview_feedback (round_id, candidate_id, manager_id, remark_text, recommendation) VALUES (?, ?, ?, ?, ?)")->execute([$roundId, $data['candidate_id'], $user['id'], $remark, $recommendation]);
         $pdo->prepare("UPDATE interview_rounds SET interview_status='returned_to_recruiter', feedback_submitted_at=NOW(), closed_at=NOW() WHERE id=?")->execute([$roundId]);
-        $pdo->prepare("UPDATE candidates SET current_status='manager_feedback_received' WHERE id=?")->execute([$data['candidate_id']]);
-        $pdo->prepare("INSERT INTO candidate_status_logs (candidate_id, round_id, action_by, action_role, old_status, new_status, note) VALUES (?, ?, ?, 'manager', 'sent_to_manager', 'manager_feedback_received', ?)")->execute([$data['candidate_id'], $roundId, $user['id'], 'Manager feedback submitted: ' . $recommendation]);
-        header('Location: manager-dashboard.php');
+        $oldStatus = $data['current_status'] ?? 'sent_to_manager';
+
+        $statusMap = [
+            'reject' => 'manager_rejected',
+            'select' => 'manager_selected',
+            'next_round' => 'manager_next_round',
+            'hold' => 'manager_hold'
+        ];
+
+        $newStatus = $statusMap[$recommendation] ?? 'manager_hold';
+
+        $pdo->prepare("UPDATE candidates SET current_status=? WHERE id=?")
+            ->execute([$newStatus, $data['candidate_id']]);
+
+        $pdo->prepare("
+    INSERT INTO candidate_status_logs
+    (candidate_id, round_id, action_by, action_role, old_status, new_status, note)
+    VALUES (?, ?, ?, 'manager', ?, ?, ?)
+")->execute([
+                    $data['candidate_id'],
+                    $roundId,
+                    $user['id'],
+                    $oldStatus,
+                    $newStatus,
+                    'Manager feedback submitted: ' . $recommendation . ' | ' . $remark
+                ]);
+                header('Location: dashboard.php');
         exit;
     }
 }
@@ -57,13 +81,12 @@ include __DIR__ . '/../app/views/layouts/header.php';
 ?>
 
 <style>
-
-    .grid.grid-2{
-    display:grid;
-    grid-template-columns:1.35fr 0.95fr;
-    gap:20px;
-    align-items:start;
-}
+    .grid.grid-2 {
+        display: grid;
+        grid-template-columns: 1.35fr 0.95fr;
+        gap: 20px;
+        align-items: start;
+    }
 </style>
 <div class="grid grid-2">
     <div class="card">
@@ -119,9 +142,12 @@ include __DIR__ . '/../app/views/layouts/header.php';
                         <th>Resume</th>
                         <td colspan="3">
                             <?php if (!empty($data['resume_path'])): ?>
-                                &nbsp; &nbsp; &nbsp; &nbsp; <a href="<?= h($data['resume_path']) ?>" target="_blank" rel="noopener noreferrer"> <stong>Open
-                                    Resume </stong></a>
-                                &nbsp;  &nbsp;
+                                &nbsp; &nbsp; &nbsp; &nbsp; <a href="<?= h($data['resume_path']) ?>" target="_blank"
+                                    rel="noopener noreferrer">
+                                    <stong>Open
+                                        Resume </stong>
+                                </a>
+                                &nbsp; &nbsp;
                                 <!-- <a href="download-resume.php?file=<?= urlencode($data['resume_path']) ?>">Download
                                     Resume</a> -->
                             <?php else: ?>
