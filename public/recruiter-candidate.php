@@ -348,7 +348,7 @@ $managers = $managerStmt->fetchAll(PDO::FETCH_ASSOC);
         font-size: 13px;
         font-weight: 700;
         cursor: pointer;
-        color: #fff;
+        color: #fff00;
     }
 
     .btn-pink {

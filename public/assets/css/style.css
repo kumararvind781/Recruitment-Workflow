@@ -26,6 +26,30 @@ body {
     color: var(--text)
 }
 
+/* header cdd */
+.brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand-logo img {
+    height: 52px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+}
+
+.brand-text h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+}
+
+.brand-text .muted {
+    margin: 4px 0 0;
+}
+
 a {
     text-decoration: none;
     color: inherit

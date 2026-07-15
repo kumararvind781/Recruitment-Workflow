@@ -1,49 +1,64 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
 require_once __DIR__ . '/../app/helpers/auth.php';
 require_once __DIR__ . '/../app/config/database.php';
+
 require_login();
+
 $pdo = Database::connect();
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
 $user = current_user();
 $role = $user['role'];
-$whereRounds = '';
-$whereCandidates = '';
-$paramsRounds = [];
-$paramsCandidates = [];
-if ($role === 'manager') {
-    $whereRounds = ' WHERE ir.manager_id = ?';
-    $paramsRounds[] = $user['id'];
-}
+
 $stats = [];
 
-$stats['total_candidates'] = (int) $pdo->query("SELECT COUNT(*) FROM candidates")->fetchColumn();
+$stats['total_candidates'] = (int) $pdo->query("
+    SELECT COUNT(*)
+    FROM candidates
+")->fetchColumn();
 
 $stats['today_interviews'] = $role === 'manager'
     ? (function ($pdo, $uid) {
-        $s = $pdo->prepare("SELECT COUNT(*) FROM interview_rounds WHERE manager_id = ? AND DATE(scheduled_at) = CURDATE()");
+        $s = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM interview_rounds
+            WHERE manager_id = ?
+              AND DATE(scheduled_at) = CURDATE()
+        ");
         $s->execute([$uid]);
         return (int) $s->fetchColumn();
     })($pdo, $user['id'])
-    : (int) $pdo->query("SELECT COUNT(*) FROM interview_rounds WHERE DATE(scheduled_at) = CURDATE()")->fetchColumn();
+    : (int) $pdo->query("
+        SELECT COUNT(*)
+        FROM interview_rounds
+        WHERE DATE(scheduled_at) = CURDATE()
+    ")->fetchColumn();
 
 $stats['selected'] = (int) $pdo->query("
     SELECT COUNT(*)
     FROM candidates
-    WHERE current_status IN ('selected', 'manager_selected')
+    WHERE current_status IN ('selected', 'direct_selected', 'manager_selected')
        OR final_decision = 'selected'
 ")->fetchColumn();
 
 $stats['rejected'] = (int) $pdo->query("
     SELECT COUNT(*)
     FROM candidates
-    WHERE current_status IN ('rejected', 'manager_rejected')
+    WHERE current_status IN ('rejected', 'rejected_without_interview', 'manager_rejected')
        OR final_decision = 'rejected'
 ")->fetchColumn();
 
 $stats['pending_feedback'] = $role === 'manager'
     ? (function ($pdo, $uid) {
-        $s = $pdo->prepare("SELECT COUNT(*) FROM interview_rounds WHERE manager_id = ? AND interview_status = 'assigned'");
+        $s = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM interview_rounds
+            WHERE manager_id = ?
+              AND interview_status = 'assigned'
+        ");
         $s->execute([$uid]);
         return (int) $s->fetchColumn();
     })($pdo, $user['id'])
@@ -54,59 +69,121 @@ $stats['pending_feedback'] = $role === 'manager'
     ")->fetchColumn();
 
 if ($role === 'manager') {
-    $stmt = $pdo->prepare("SELECT ir.id AS round_id, c.id, c.application_no, c.full_name, c.position_applied, c.current_status, ir.round_name, ir.interview_status, ir.scheduled_at
+    $stmt = $pdo->prepare("
+        SELECT
+            ir.id AS round_id,
+            c.id,
+            c.application_no,
+            c.full_name,
+            c.position_applied,
+            c.current_status,
+            ir.round_name,
+            ir.interview_status,
+            ir.scheduled_at
         FROM interview_rounds ir
         JOIN candidates c ON c.id = ir.candidate_id
         WHERE ir.manager_id = ?
-        ORDER BY ir.id DESC");
+        ORDER BY ir.id DESC
+    ");
     $stmt->execute([$user['id']]);
-    $rows = $stmt->fetchAll();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } else {
-    $rows = $pdo->query("SELECT c.id, c.application_no, c.full_name, c.position_applied, c.current_status, c.final_decision, c.applied_at,
-        (SELECT recommendation FROM interview_feedback f WHERE f.candidate_id = c.id ORDER BY f.id DESC LIMIT 1) AS latest_feedback,
-        (SELECT remark_text FROM interview_feedback f WHERE f.candidate_id = c.id ORDER BY f.id DESC LIMIT 1) AS latest_remark
-        FROM candidates c ORDER BY c.id DESC LIMIT 50")->fetchAll();
+    $rows = $pdo->query("
+        SELECT
+            c.id,
+            c.application_no,
+            c.full_name,
+            c.position_applied,
+            c.current_status,
+            c.final_decision,
+            c.applied_at,
+
+            COALESCE(
+                (
+                    SELECT f.recommendation
+                    FROM interview_feedback f
+                    WHERE f.candidate_id = c.id
+                    ORDER BY f.id DESC
+                    LIMIT 1
+                ),
+                (
+                    SELECT l.new_status
+                    FROM candidate_status_logs l
+                    WHERE l.candidate_id = c.id
+                    ORDER BY l.id DESC
+                    LIMIT 1
+                )
+            ) AS latest_feedback,
+
+            COALESCE(
+                (
+                    SELECT f.remark_text
+                    FROM interview_feedback f
+                    WHERE f.candidate_id = c.id
+                    ORDER BY f.id DESC
+                    LIMIT 1
+                ),
+                (
+                    SELECT l.note
+                    FROM candidate_status_logs l
+                    WHERE l.candidate_id = c.id
+                    ORDER BY l.id DESC
+                    LIMIT 1
+                )
+            ) AS latest_remark
+
+        FROM candidates c
+        ORDER BY c.id DESC
+        LIMIT 50
+    ")->fetchAll(PDO::FETCH_ASSOC);
 }
+
 $title = ucfirst($role) . ' Dashboard';
 include __DIR__ . '/../app/views/layouts/header.php';
 ?>
+
 <section class="stats">
     <div class="card">
         <h3>Total Candidates</h3>
-        <p>6</p>
+        <p><?= (int) $stats['total_candidates'] ?></p>
     </div>
 
     <div class="card">
         <h3>Today Interviews</h3>
-        <p>0</p>
+        <p><?= (int) $stats['today_interviews'] ?></p>
     </div>
 
     <div class="card selected">
         <h3>Selected</h3>
-        <p>0</p>
+        <p><?= (int) $stats['selected'] ?></p>
     </div>
 
     <div class="card rejected">
         <h3>Rejected</h3>
-        <p>1</p>
+        <p><?= (int) $stats['rejected'] ?></p>
     </div>
 
     <div class="card pending">
         <h3>Pending Feedback</h3>
-        <p>1</p>
+        <p><?= (int) $stats['pending_feedback'] ?></p>
     </div>
 </section>
+
 <?php if ($role === 'admin'): ?>
     <div class="section-title">
         <h2>Admin Controls</h2>
-        <div class="actions"><a class="btn" href="users.php">Manage Users</a><a class="btn btn-outline"
-                href="apply.php">Candidate Form</a></div>
+        <div class="actions">
+            <a class="btn" href="users.php">Manage Users</a>
+            <a class="btn btn-outline" href="apply.php">Candidate Form</a>
+        </div>
     </div>
 <?php endif; ?>
+
 <div class="section-title">
-    <h2><?= $role === 'manager' ? 'Assigned Interviews' : 'Interview Status Overview' ?></h2><span
-        class="pill"><?= h($role) ?> view</span>
+    <h2><?= $role === 'manager' ? 'Assigned Interviews' : 'Interview Status Overview' ?></h2>
+    <span class="pill"><?= h($role) ?> view</span>
 </div>
+
 <div class="card">
     <table>
         <thead>
@@ -142,20 +219,33 @@ include __DIR__ . '/../app/views/layouts/header.php';
                         <td><?= h($row['position_applied']) ?></td>
                         <td><span class="badge pending"><?= h($row['current_status']) ?></span></td>
                         <td><span class="badge round"><?= h($row['interview_status']) ?></span></td>
-                        <td><a class="btn btn-outline" href="manager-review.php?round_id=<?= (int) $row['round_id'] ?>">Open</a>
+                        <td>
+                            <a class="btn btn-outline" href="manager-review.php?round_id=<?= (int) $row['round_id'] ?>">Open</a>
                         </td>
                     <?php else: ?>
+                        <?php
+                        $latestFeedback = $row['latest_feedback'] ?: '-';
+
+                        if ($latestFeedback === 'selected' || $latestFeedback === 'direct_selected' || $latestFeedback === 'manager_selected') {
+                            $latestFeedback = 'select';
+                        } elseif ($latestFeedback === 'rejected' || $latestFeedback === 'rejected_without_interview' || $latestFeedback === 'manager_rejected') {
+                            $latestFeedback = 'reject';
+                        }
+                        ?>
                         <td><?= h($row['application_no']) ?></td>
                         <td><?= h($row['full_name']) ?></td>
                         <td><?= h($row['position_applied']) ?></td>
                         <td><span class="badge pending"><?= h($row['current_status']) ?></span></td>
-                        <td><?= h($row['latest_feedback'] ?: '-') ?></td>
+                        <td><?= h($latestFeedback) ?></td>
                         <td><?= h($row['latest_remark'] ?: '-') ?></td>
-                        <td><a class="btn btn-outline" href="recruiter-candidate.php?id=<?= (int) $row['id'] ?>">Open</a></td>
+                        <td>
+                            <a class="btn btn-outline" href="recruiter-candidate.php?id=<?= (int) $row['id'] ?>">Open</a>
+                        </td>
                     <?php endif; ?>
                 </tr>
             <?php endforeach; ?>
         </tbody>
     </table>
 </div>
+
 <?php include __DIR__ . '/../app/views/layouts/footer.php'; ?>
