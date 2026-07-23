@@ -914,12 +914,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="grid">
                 <div class="field">
                     <label>Resume *</label>
-                    <input type="file" name="resume" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                    <input type="file" name="resume" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"  required>
                 </div>
 
                 <div class="field">
                     <label>Self Photo *</label>
-                    <input type="file" name="photo" accept=".jpg,.jpeg,.png">
+                    <input type="file" name="photo" accept=".jpg,.jpeg,.png" required>
                 </div>
             </div>
 

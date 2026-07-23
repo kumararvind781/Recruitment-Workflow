@@ -8,6 +8,13 @@ require_once __DIR__ . '/../app/config/database.php';
 
 require_role(['admin', 'recruiter', 'manager']);
 
+if (!function_exists('h')) {
+    function h($value)
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    }
+}
+
 $pdo = Database::connect();
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
@@ -62,10 +69,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit('Please select manager');
         }
 
+        $mStmt = $pdo->prepare("SELECT full_name FROM users WHERE id = ? LIMIT 1");
+        $mStmt->execute([$managerId]);
+        $managerName = (string) $mStmt->fetchColumn();
+        if ($managerName === '') {
+            exit('Manager not found');
+        }
+
         $nextRoundNoStmt = $pdo->prepare("SELECT COALESCE(MAX(round_no), 0) + 1 FROM interview_rounds WHERE candidate_id = ?");
         $nextRoundNoStmt->execute([$id]);
         $roundNo = (int) $nextRoundNoStmt->fetchColumn();
-
         $roundName = 'Round ' . $roundNo;
 
         $insertRound = $pdo->prepare("
@@ -78,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $newStatus = 'sent_to_manager';
         $newDecision = 'pending';
+        $note = $note !== '' ? $note : ('Assigned to ' . $managerName);
     } elseif ($action === 'final_select') {
         $newStatus = 'selected';
         $newDecision = 'selected';
@@ -118,13 +132,13 @@ include __DIR__ . '/../app/views/layouts/header.php';
 
 <style>
 body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f7f3f7;color:#2c2337}
-.container{max-width:900px;margin:24px auto;padding:0 16px 40px}
+.container{max-width:1200px;margin:24px auto;padding:0 16px 40px}
 .card{background:#fff;border:1px solid #eadfeb;border-radius:18px;padding:20px;box-shadow:0 10px 24px rgba(122,69,119,.06)}
 h2{margin:0 0 18px;font-size:28px;color:#2f2640}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
-.panel{border:1px solid #ecdfee;border-radius:16px;padding:16px;background:#fcfafc}
-.panel h4{margin:0 0 14px;font-size:16px;color:#302640}
-.field{margin-bottom:12px}
+.panel{ width: 90%;border:1px solid #ecdfee;border-radius:16px;padding:16px;background:#fcfafc}
+.panel h4{ margin:0 0 14px;font-size:16px;color:#302640}
+.field{ width: 90%; margin-bottom:12px}
 .field label{display:block;margin-bottom:6px;font-size:13px;font-weight:700;color:#43384f}
 .field input,.field select,.field textarea{width:100%;border:1px solid #e3dbe5;background:#fff;border-radius:12px;padding:11px 12px;font-size:14px;color:#2e2437;outline:none}
 .field textarea{min-height:74px;resize:vertical}

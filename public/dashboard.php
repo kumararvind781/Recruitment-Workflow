@@ -79,9 +79,11 @@ if ($role === 'manager') {
             c.current_status,
             ir.round_name,
             ir.interview_status,
-            ir.scheduled_at
+            ir.scheduled_at,
+            u.full_name AS manager_name
         FROM interview_rounds ir
         JOIN candidates c ON c.id = ir.candidate_id
+        LEFT JOIN users u ON u.id = ir.manager_id
         WHERE ir.manager_id = ?
         ORDER BY ir.id DESC
     ");
@@ -97,41 +99,28 @@ if ($role === 'manager') {
             c.current_status,
             c.final_decision,
             c.applied_at,
-
-            COALESCE(
-                (
-                    SELECT f.recommendation
-                    FROM interview_feedback f
-                    WHERE f.candidate_id = c.id
-                    ORDER BY f.id DESC
-                    LIMIT 1
-                ),
-                (
-                    SELECT l.new_status
-                    FROM candidate_status_logs l
-                    WHERE l.candidate_id = c.id
-                    ORDER BY l.id DESC
-                    LIMIT 1
-                )
+            (
+                SELECT f.recommendation
+                FROM interview_feedback f
+                WHERE f.candidate_id = c.id
+                ORDER BY f.id DESC
+                LIMIT 1
             ) AS latest_feedback,
-
-            COALESCE(
-                (
-                    SELECT f.remark_text
-                    FROM interview_feedback f
-                    WHERE f.candidate_id = c.id
-                    ORDER BY f.id DESC
-                    LIMIT 1
-                ),
-                (
-                    SELECT l.note
-                    FROM candidate_status_logs l
-                    WHERE l.candidate_id = c.id
-                    ORDER BY l.id DESC
-                    LIMIT 1
-                )
-            ) AS latest_remark
-
+            (
+                SELECT f.remark_text
+                FROM interview_feedback f
+                WHERE f.candidate_id = c.id
+                ORDER BY f.id DESC
+                LIMIT 1
+            ) AS latest_remark,
+            (
+                SELECT u.full_name
+                FROM interview_feedback f
+                LEFT JOIN users u ON u.id = f.manager_id
+                WHERE f.candidate_id = c.id
+                ORDER BY f.id DESC
+                LIMIT 1
+            ) AS manager_name
         FROM candidates c
         ORDER BY c.id DESC
         LIMIT 50
@@ -142,45 +131,43 @@ $title = ucfirst($role) . ' Dashboard';
 include __DIR__ . '/../app/views/layouts/header.php';
 ?>
 
+<?php if ($role !== 'manager'): ?>
 <section class="stats">
     <div class="card">
         <h3>Total Candidates</h3>
         <p><?= (int) $stats['total_candidates'] ?></p>
     </div>
-
     <div class="card">
         <h3>Today Interviews</h3>
         <p><?= (int) $stats['today_interviews'] ?></p>
     </div>
-
     <div class="card selected">
         <h3>Selected</h3>
         <p><?= (int) $stats['selected'] ?></p>
     </div>
-
     <div class="card rejected">
         <h3>Rejected</h3>
         <p><?= (int) $stats['rejected'] ?></p>
     </div>
-
     <div class="card pending">
         <h3>Pending Feedback</h3>
         <p><?= (int) $stats['pending_feedback'] ?></p>
     </div>
 </section>
+<?php endif; ?>
 
 <?php if ($role === 'admin'): ?>
-    <div class="section-title">
-        <h2>Admin Controls</h2>
-        <div class="actions">
-            <a class="btn" href="users.php">Manage Users</a>
-            <a class="btn btn-outline" href="apply.php">Candidate Form</a>
-        </div>
+<div class="section-title">
+    <h2>Admin Controls</h2>
+    <div class="actions">
+        <a class="btn" href="users.php">Manage Users</a>
+        <a class="btn btn-outline" href="apply.php">Candidate Form</a>
     </div>
+</div>
 <?php endif; ?>
 
 <div class="section-title">
-    <h2><?= $role === 'manager' ? 'Assigned Interviews' : 'Interview Status Overview' ?></h2>
+    <h2>Assigned Interviews</h2>
     <span class="pill"><?= h($role) ?> view</span>
 </div>
 
@@ -203,6 +190,7 @@ include __DIR__ . '/../app/views/layouts/header.php';
                     <th>Name</th>
                     <th>Position</th>
                     <th>Current Status</th>
+                    <th>Manager</th>
                     <th>Latest Feedback</th>
                     <th>Remark</th>
                     <th>Action</th>
@@ -225,7 +213,6 @@ include __DIR__ . '/../app/views/layouts/header.php';
                     <?php else: ?>
                         <?php
                         $latestFeedback = $row['latest_feedback'] ?: '-';
-
                         if ($latestFeedback === 'selected' || $latestFeedback === 'direct_selected' || $latestFeedback === 'manager_selected') {
                             $latestFeedback = 'select';
                         } elseif ($latestFeedback === 'rejected' || $latestFeedback === 'rejected_without_interview' || $latestFeedback === 'manager_rejected') {
@@ -236,6 +223,7 @@ include __DIR__ . '/../app/views/layouts/header.php';
                         <td><?= h($row['full_name']) ?></td>
                         <td><?= h($row['position_applied']) ?></td>
                         <td><span class="badge pending"><?= h($row['current_status']) ?></span></td>
+                        <td><?= h($row['manager_name'] ?: '-') ?></td>
                         <td><?= h($latestFeedback) ?></td>
                         <td><?= h($row['latest_remark'] ?: '-') ?></td>
                         <td>
