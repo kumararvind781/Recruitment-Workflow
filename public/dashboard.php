@@ -127,43 +127,78 @@ if ($role === 'manager') {
     ")->fetchAll(PDO::FETCH_ASSOC);
 }
 
+//  Add pending query
+
+$pendingStmt = $pdo->prepare("
+    SELECT
+        c.id,
+        c.application_no,
+        c.full_name,
+        c.position_applied,
+        c.current_status,
+        ir.round_name,
+        ir.round_no,
+        u.full_name AS manager_name
+    FROM candidates c
+    LEFT JOIN interview_rounds ir
+        ON ir.candidate_id = c.id
+       AND ir.id = (
+            SELECT ir2.id
+            FROM interview_rounds ir2
+            WHERE ir2.candidate_id = c.id
+            ORDER BY ir2.id DESC
+            LIMIT 1
+       )
+    LEFT JOIN users u
+        ON u.id = ir.manager_id
+    WHERE c.current_status = 'sent_to_manager'
+    ORDER BY u.full_name ASC, c.id DESC
+");
+$pendingStmt->execute();
+$pendingFeedbacks = $pendingStmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+$pendingCount = count($pendingFeedbacks);
+
+//  Add pending query eND
+
 $title = ucfirst($role) . ' Dashboard';
 include __DIR__ . '/../app/views/layouts/header.php';
 ?>
 
 <?php if ($role !== 'manager'): ?>
-<section class="stats">
-    <div class="card">
-        <h3>Total Candidates</h3>
-        <p><?= (int) $stats['total_candidates'] ?></p>
-    </div>
-    <div class="card">
-        <h3>Today Interviews</h3>
-        <p><?= (int) $stats['today_interviews'] ?></p>
-    </div>
-    <div class="card selected">
-        <h3>Selected</h3>
-        <p><?= (int) $stats['selected'] ?></p>
-    </div>
-    <div class="card rejected">
-        <h3>Rejected</h3>
-        <p><?= (int) $stats['rejected'] ?></p>
-    </div>
-    <div class="card pending">
-        <h3>Pending Feedback</h3>
-        <p><?= (int) $stats['pending_feedback'] ?></p>
-    </div>
-</section>
+    <section class="stats">
+        <div class="card">
+            <h3>Total Candidates</h3>
+            <p><?= (int) $stats['total_candidates'] ?></p>
+        </div>
+        <div class="card">
+            <h3>Today Interviews</h3>
+            <p><?= (int) $stats['today_interviews'] ?></p>
+        </div>
+        <div class="card selected">
+            <h3>Selected</h3>
+            <p><?= (int) $stats['selected'] ?></p>
+        </div>
+        <div class="card rejected">
+            <h3>Rejected</h3>
+            <p><?= (int) $stats['rejected'] ?></p>
+        </div>
+        <div class="card pending-card" onclick="openPendingModal()">
+            <h3>Pending Feedback</h3>
+            <p><?= (int) $pendingCount ?></p>
+        </div>
+    </section>
 <?php endif; ?>
 
 <?php if ($role === 'admin'): ?>
-<div class="section-title">
-    <h2>Admin Controls</h2>
-    <div class="actions">
-        <a class="btn" href="users.php">Manage Users</a>
-        <a class="btn btn-outline" href="apply.php">Candidate Form</a>
+    <div class="section-title">
+        <h2>Admin Controls</h2>
+        <div class="actions">
+            <a class="btn" href="users.php">Manage Users</a>
+            <a class="btn btn-outline" href="apply.php">Candidate Form</a>
+        </div>
     </div>
-</div>
 <?php endif; ?>
 
 <div class="section-title">
@@ -235,5 +270,61 @@ include __DIR__ . '/../app/views/layouts/header.php';
         </tbody>
     </table>
 </div>
+
+<div id="pendingModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Pending Feedback</h3>
+            <button class="modal-close" type="button" onclick="closePendingModal()">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <?php if ($pendingFeedbacks): ?>
+                <table class="pending-table">
+                    <thead>
+                        <tr>
+                            <th>App No</th>
+                            <th>Name</th>
+                            <th>Position</th>
+                            <th>Status</th>
+                            <th>Manager</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pendingFeedbacks as $row): ?>
+                            <tr>
+                                <td><?= h($row['application_no'] ?? '') ?></td>
+                                <td><?= h($row['full_name'] ?? '') ?></td>
+                                <td><?= h($row['position_applied'] ?? '') ?></td>
+                                <td><?= h($row['current_status'] ?? '') ?></td>
+                                <td><?= h($row['manager_name'] ?? '-') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div class="empty">No pending feedback found.</div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openPendingModal() {
+        document.getElementById('pendingModal').classList.add('open');
+    }
+
+    function closePendingModal() {
+        document.getElementById('pendingModal').classList.remove('open');
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closePendingModal();
+    });
+
+    document.getElementById('pendingModal').addEventListener('click', function (e) {
+        if (e.target === this) closePendingModal();
+    });
+</script>
 
 <?php include __DIR__ . '/../app/views/layouts/footer.php'; ?>
