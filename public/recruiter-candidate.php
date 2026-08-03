@@ -132,6 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'ca
                 smoking = ?,
                 self_vehicle = ?,
                 driving_licence = ?
+                photo_path = ?,
+                resume_path = ?
             WHERE id = ?
         ");
         $updateCandidate->execute([
@@ -180,6 +182,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'ca
             $smoking,
             $selfVehicle,
             $drivingLicence,
+            $photoPath,
+            $resumePath,
             $id
         ]);
 
@@ -373,6 +377,29 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
     }
 
     return '<input type="' . h($type) . '" name="' . h($name) . '" value="' . h((string) $value) . '">';
+}
+
+$photoPath = $candidate['photo_path'];
+$resumePath = $candidate['resume_path'];
+
+if (!empty($_FILES['photo']['name'])) {
+
+    $photoName = time() . '_' . basename($_FILES['photo']['name']);
+    $target = 'uploads/photos/' . $photoName;
+
+    move_uploaded_file($_FILES['photo']['tmp_name'], $target);
+
+    $photoPath = $target;
+}
+
+if (!empty($_FILES['resume']['name'])) {
+
+    $resumeName = time() . '_' . basename($_FILES['resume']['name']);
+    $target = 'uploads/resume/' . $resumeName;
+
+    move_uploaded_file($_FILES['resume']['tmp_name'], $target);
+
+    $resumePath = $target;
 }
 ?>
 
@@ -905,7 +932,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
     </div>
 
     <?php if ($isEditMode): ?>
-        <form method="post" id="candidateEditForm">
+        <form method="post" id="candidateEditForm" enctype="multipart/form-data">
             <input type="hidden" name="form_type" value="candidate_update">
         <?php endif; ?>
 
@@ -1140,6 +1167,33 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                                 <?php endif; ?>
                             </div>
                         </div>
+
+                        <?php if ($isEditMode): ?>
+
+                            <div class="info-box">
+                                <label>Candidate Photo</label>
+
+                                <?php if (!empty($candidate['photo_path'])): ?>
+                                    <img src="<?= h($candidate['photo_path']) ?>"
+                                        style="width:80px;height:80px;border-radius:50%;display:block;margin-bottom:10px;">
+                                <?php endif; ?>
+
+                                <input type="file" name="photo" accept="image/*">
+                            </div>
+
+                            <div class="info-box">
+                                <label>Resume</label>
+
+                                <?php if (!empty($candidate['resume_path'])): ?>
+                                    <a href="<?= h($candidate['resume_path']) ?>" target="_blank">
+                                        Current Resume
+                                    </a><br><br>
+                                <?php endif; ?>
+
+                                <input type="file" name="resume" accept=".pdf,.doc,.docx">
+                            </div>
+
+                        <?php endif; ?>
 
                         <div class="info-box"><label>Applied At</label>
                             <div><?= h($candidate['applied_at'] ?? '') ?></div>
