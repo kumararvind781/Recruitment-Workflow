@@ -134,7 +134,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'ca
                 driving_licence = ?
             WHERE id = ?
         ");
-
         $updateCandidate->execute([
             $fullName,
             $email,
@@ -337,7 +336,6 @@ $feedbackStmt->execute([$id]);
 $feedbacks = $feedbackStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $title = 'Candidate Detail';
-
 $latestManagerStmt = $pdo->prepare("
     SELECT u.full_name
     FROM interview_rounds ir
@@ -379,24 +377,30 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
 ?>
 
 <style>
-    * { box-sizing: border-box; }
+    * {
+        box-sizing: border-box;
+    }
+
     body {
         margin: 0;
         font-family: Arial, Helvetica, sans-serif;
         background: #f7f3f7;
         color: #2c2337;
     }
+
     .container {
         max-width: 1220px;
         margin: 24px auto;
         padding: 0 16px 40px;
     }
+
     .summary-grid {
         display: grid;
         grid-template-columns: 2fr 1fr 1fr 1fr;
         gap: 16px;
         margin-bottom: 20px;
     }
+
     .sum-card {
         background: #fff;
         border: 1px solid #eadfeb;
@@ -404,6 +408,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         padding: 18px;
         box-shadow: 0 10px 24px rgba(122, 69, 119, .06);
     }
+
     .sum-card small {
         display: block;
         font-size: 12px;
@@ -412,12 +417,14 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         text-transform: uppercase;
         letter-spacing: .4px;
     }
+
     .sum-card strong {
         display: block;
         font-size: 18px;
         color: #2e2439;
         line-height: 1.4;
     }
+
     .status-badge {
         display: inline-block;
         padding: 6px 10px;
@@ -427,7 +434,13 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         font-size: 12px;
         font-weight: 700;
     }
-    .accordion-wrap { display: flex; flex-direction: column; gap: 16px; }
+
+    .accordion-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
     .acc-item {
         background: #fff;
         border: 1px solid #eadfeb;
@@ -435,6 +448,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         overflow: hidden;
         box-shadow: 0 10px 24px rgba(122, 69, 119, .06);
     }
+
     .acc-item summary {
         list-style: none;
         cursor: pointer;
@@ -447,32 +461,46 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         justify-content: space-between;
         background: #fff;
     }
-    .acc-item summary::-webkit-details-marker { display: none; }
+
+    .acc-item summary::-webkit-details-marker {
+        display: none;
+    }
+
     .acc-item summary::after {
         content: "+";
         font-size: 24px;
         font-weight: 700;
         color: #b43c8c;
     }
-    .acc-item[open] summary::after { content: "−"; }
+
+    .acc-item[open] summary::after {
+        content: "−";
+    }
+
     .acc-body {
         padding: 0 20px 20px;
         border-top: 1px solid #f1e7f0;
         background: #fff;
     }
+
     .info-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
         margin-top: 18px;
     }
+
     .info-box {
         border: 1px solid #eadfeb;
         border-radius: 14px;
         padding: 12px 14px;
         background: #fcfafc;
     }
-    .info-box.wide { grid-column: span 3; }
+
+    .info-box.wide {
+        grid-column: span 3;
+    }
+
     .info-box label {
         display: block;
         font-size: 12px;
@@ -482,6 +510,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         text-transform: uppercase;
         letter-spacing: .35px;
     }
+
     .info-box div {
         font-size: 15px;
         color: #2d2437;
@@ -489,6 +518,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         word-break: break-word;
         min-height: 22px;
     }
+
     .info-box input,
     .info-box select,
     .info-box textarea,
@@ -504,11 +534,13 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         color: #2e2437;
         outline: none;
     }
+
     .info-box textarea,
     .table-wrap textarea {
         min-height: 90px;
         resize: vertical;
     }
+
     .btn {
         display: inline-block;
         border: none;
@@ -521,34 +553,52 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         background-color: #CF3D84;
         text-decoration: none;
     }
-    .btn-pink { background: #cf3d84; }
-    .btn-green { background: #2ea160; }
-    .btn-orange { background: #d98314; }
-    .btn-red { background: #d53f5d; }
+
+    .btn-pink {
+        background: #cf3d84;
+    }
+
+    .btn-green {
+        background: #2ea160;
+    }
+
+    .btn-orange {
+        background: #d98314;
+    }
+
+    .btn-red {
+        background: #d53f5d;
+    }
+
     .table-wrap {
         margin-top: 18px;
         overflow: auto;
         border: 1px solid #eee3ee;
         border-radius: 14px;
     }
+
     table {
         width: 100%;
         border-collapse: collapse;
         min-width: 700px;
         background: #fff;
     }
-    th, td {
+
+    th,
+    td {
         border-bottom: 1px solid #f1e8f1;
         padding: 12px 10px;
         text-align: left;
         vertical-align: top;
         font-size: 14px;
     }
+
     th {
         background: #fbf7fb;
         color: #5f536f;
         font-size: 13px;
     }
+
     .empty {
         margin-top: 16px;
         padding: 14px;
@@ -557,77 +607,281 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
         background: #fcfafc;
         color: #83778f;
     }
+
     .stack-list {
         display: flex;
         flex-direction: column;
         gap: 14px;
         margin-top: 18px;
     }
+
     .stack-card {
         border: 1px solid #eadfeb;
         border-radius: 14px;
         padding: 14px;
         background: #fcfafc;
     }
+
     .stack-card h5 {
         margin: 0 0 6px;
         font-size: 15px;
         color: #2f2640;
     }
+
     .stack-card p {
         margin: 4px 0;
         font-size: 14px;
         color: #5d526a;
         line-height: 1.5;
     }
+
     .feedback-card {
         border: 1px solid #eadfeb;
         border-radius: 14px;
         padding: 14px;
         background: #fcfafc;
     }
+
     @media (max-width: 1100px) {
-        .summary-grid { grid-template-columns: 1fr 1fr; }
-        .info-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .info-box.wide { grid-column: span 2; }
+        .summary-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .info-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .info-box.wide {
+            grid-column: span 2;
+        }
     }
+
     @media (max-width: 760px) {
-        .summary-grid, .info-grid { grid-template-columns: 1fr; }
-        .info-box.wide { grid-column: span 1; }
+
+        .summary-grid,
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .info-box.wide {
+            grid-column: span 1;
+        }
+
         .acc-item summary {
             font-size: 18px;
             padding: 16px;
         }
-        .acc-body { padding: 0 16px 16px; }
+
+        .acc-body {
+            padding: 0 16px 16px;
+        }
+    }
+
+    /* new sum card css */
+
+    .sum-card {
+        display: flex;
+        align-items: center;
+        background: #fff;
+        border: 1px solid #ece4f7;
+        border-radius: 18px;
+        padding: 25px;
+        gap: 25px;
+    }
+
+    /* LEFT PART (30%) */
+    .candidate-photo {
+        width: 30%;
+        min-width: 160px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-right: 2px solid #ececec;
+        padding-right: 25px;
+    }
+
+    /* RIGHT PART (70%) */
+    .candidate-info {
+        width: 70%;
+        flex: 1;
+    }
+
+    .candidate-photo img,
+    .no-photo {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+    }
+
+    .candidate-photo img {
+        object-fit: cover;
+        border: 4px solid #ece4f7;
+    }
+
+    .no-photo {
+        border: 3px dashed #d9c8f5;
+        background: #faf8ff;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: #8b82a1;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .no-photo span {
+        margin-top: 6px;
+    }
+
+    .candidate-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .candidate-info strong {
+        display: block;
+        font-size: 30px;
+        color: #2d2340;
+        margin-bottom: 10px;
+    }
+
+    .candidate-email {
+        color: #72677f;
+        font-size: 15px;
+        line-height: 1.5;
+    }
+
+    .status-badge {
+        background: #9c27b0;
+        color: #fff;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: capitalize;
+        color: #fff;
+    }
+
+    /* Status Colors */
+    .status-submitted {
+        background: #9C27B0;
+    }
+
+    .status-shortlisted {
+        background: #2196F3;
+    }
+
+    .status-interview {
+        background: #FF9800;
+    }
+
+    .status-selected {
+        background: #4CAF50;
+    }
+
+    .status-rejected {
+        background: #F44336;
+    }
+
+    .status-pending {
+        background: #9E9E9E;
+    }
+
+    .app-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .app-card strong {
+        margin: 12px 0 20px;
+        font-size: 26px;
+    }
+
+    .app-card .btn {
+        align-self: flex-start;
     }
 </style>
 
 <div class="container">
     <div class="summary-grid">
         <div class="sum-card">
-            <small>Candidate</small>
-            <strong><?= h($candidate['full_name'] ?? '') ?></strong>
-            <div style="margin-top:8px;color:#72677f;font-size:14px;">
-                <?= h($candidate['position_applied'] ?? '') ?> • <?= h($candidate['email'] ?? '') ?>
+
+            <!-- Left Side -->
+            <div class="candidate-photo">
+
+                <?php if (!empty($candidate['photo_path'])): ?>
+                    <img src="<?= h($candidate['photo_path']) ?>" alt="Candidate">
+                <?php else: ?>
+                    <div class="no-photo">
+                        👤
+                        <span>No Image</span>
+                    </div>
+                <?php endif; ?>
+
             </div>
+
+            <!-- Right Side -->
+            <div class="candidate-info">
+
+                <div class="candidate-header">
+                    <!-- <small>Candidate</small> -->
+
+                    <?php $status = $candidate['current_status'] ?? 'Submitted'; ?>
+                    <span class="status-badge">
+                        <?= ucfirst(h($status)) ?>
+                    </span>
+                </div>
+
+                <strong><?= h($candidate['full_name'] ?? '') ?></strong>
+
+                <div class="candidate-email">
+                    <?= h($candidate['position_applied'] ?? '') ?>
+                    •
+                    <?= h($candidate['email'] ?? '') ?>
+                </div>
+
+                <div style="margin-top:18px;">
+                    <?php if (!empty($candidate['resume_path'])): ?>
+                        <a class="resume-btn" href="<?= h($candidate['resume_path']) ?>" target="_blank">
+                            📄 Resume Preview
+                        </a>
+                    <?php else: ?>
+                        <span class="no-resume">Resume Not Uploaded</span>
+                    <?php endif; ?>
+                </div>
+
+            </div>
+
         </div>
 
-        <div class="sum-card">
+        <div class="sum-card app-card">
             <small>Application No</small>
+
             <strong><?= h($candidate['application_no'] ?? '') ?></strong>
-            <div style="margin-top:16px;display:flex;justify-content:flex-end;">
-                <a class="btn btn-pink" href="candidate-pdf.php?id=<?= (int) $candidate['id'] ?>" target="_blank"
-                    rel="noopener noreferrer">
-                    Preview Summary PDF
-                </a>
-            </div>
+
+            <a class="btn btn-pink" href="candidate-pdf.php?id=<?= (int) $candidate['id'] ?>" target="_blank">
+                Preview Summary PDF
+            </a>
+
         </div>
 
-        <div class="sum-card">
+        <!-- <div class="sum-card">
             <small>Status</small>
             <?php $status = $candidate['current_status'] ?? 'submitted'; ?>
             <span class="status-badge"><?= h($status) ?></span>
-        </div>
+        </div> -->
 
         <div class="sum-card">
             <small>Final Decision</small>
@@ -638,11 +892,13 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                     <button class="btn btn-green" type="submit" form="candidateEditForm">Save Changes</button>
                     <a class="btn btn-red" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>">Cancel</a>
                 <?php else: ?>
-                    <a class="btn btn-pink" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>&edit=1">Edit Candidate</a>
+                    <a class="btn btn-pink" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>&edit=1">Edit
+                        Candidate</a>
                 <?php endif; ?>
 
                 <?php if (($candidate['final_decision'] ?? 'pending') === 'pending' && !$isEditMode): ?>
-                    <a class="btn btn-orange" href="recruiter-candidate-action.php?id=<?= (int) $candidate['id'] ?>">Take Action</a>
+                    <a class="btn btn-orange" href="recruiter-candidate-action.php?id=<?= (int) $candidate['id'] ?>">Take
+                        Action</a>
                 <?php endif; ?>
             </div>
         </div>
@@ -669,10 +925,13 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                         </div>
 
                         <div class="info-box"><label>Alternate Phone</label>
-                            <div><?= field_value($isEditMode, 'alternate_phone', $candidate['alternate_phone'] ?? '') ?></div>
+                            <div><?= field_value($isEditMode, 'alternate_phone', $candidate['alternate_phone'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Father / Husband Name</label>
-                            <div><?= field_value($isEditMode, 'father_husband_name', $candidate['father_husband_name'] ?? '') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'father_husband_name', $candidate['father_husband_name'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Emergency No</label>
                             <div><?= field_value($isEditMode, 'emergency_no', $candidate['emergency_no'] ?? '') ?></div>
@@ -685,54 +944,79 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                             <div><?= field_value($isEditMode, 'age', $candidate['age'] ?? '', 'number') ?></div>
                         </div>
                         <div class="info-box"><label>Gender</label>
-                            <div><?= field_value($isEditMode, 'gender', $candidate['gender'] ?? '', 'select', ['Male', 'Female', 'Other']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'gender', $candidate['gender'] ?? '', 'select', ['Male', 'Female', 'Other']) ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>Marital Status</label>
-                            <div><?= field_value($isEditMode, 'marital_status', $candidate['marital_status'] ?? '', 'select', ['Single', 'Married', 'Other']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'marital_status', $candidate['marital_status'] ?? '', 'select', ['Single', 'Married', 'Other']) ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Highest Qualification</label>
-                            <div><?= field_value($isEditMode, 'highest_qualification', $candidate['highest_qualification'] ?? '') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'highest_qualification', $candidate['highest_qualification'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Total Experience</label>
-                            <div><?= field_value($isEditMode, 'total_experience', $candidate['total_experience'] ?? '', 'number') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'total_experience', $candidate['total_experience'] ?? '', 'number') ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>Current Company</label>
-                            <div><?= field_value($isEditMode, 'current_company', $candidate['current_company'] ?? '') ?></div>
+                            <div><?= field_value($isEditMode, 'current_company', $candidate['current_company'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Current Salary</label>
-                            <div><?= field_value($isEditMode, 'current_salary', $candidate['current_salary'] ?? '', 'number') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'current_salary', $candidate['current_salary'] ?? '', 'number') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Expected Salary</label>
-                            <div><?= field_value($isEditMode, 'expected_salary', $candidate['expected_salary'] ?? '', 'number') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'expected_salary', $candidate['expected_salary'] ?? '', 'number') ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>Position Applied</label>
-                            <div><?= field_value($isEditMode, 'position_applied', $candidate['position_applied'] ?? '') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'position_applied', $candidate['position_applied'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Department</label>
                             <div><?= field_value($isEditMode, 'department', $candidate['department'] ?? '') ?></div>
                         </div>
                         <div class="info-box"><label>Notice Period</label>
-                            <div><?= field_value($isEditMode, 'notice_period', $candidate['notice_period'] ?? '') ?></div>
+                            <div><?= field_value($isEditMode, 'notice_period', $candidate['notice_period'] ?? '') ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>Notice Specify</label>
-                            <div><?= field_value($isEditMode, 'notice_period_specify', $candidate['notice_period_specify'] ?? '') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'notice_period_specify', $candidate['notice_period_specify'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Source Type</label>
-                            <div><?= field_value($isEditMode, 'source_type', $candidate['source_type'] ?? '', 'select', ['walkin', 'qr', 'link', 'reference']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'source_type', $candidate['source_type'] ?? '', 'select', ['walkin', 'qr', 'link', 'reference']) ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Source Reference Name</label>
-                            <div><?= field_value($isEditMode, 'source_reference_name', $candidate['source_reference_name'] ?? '') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'source_reference_name', $candidate['source_reference_name'] ?? '') ?>
+                            </div>
                         </div>
 
                         <div class="info-box wide"><label>Current Address</label>
-                            <div><?= field_value($isEditMode, 'address', $candidate['address'] ?? '', 'textarea') ?></div>
+                            <div><?= field_value($isEditMode, 'address', $candidate['address'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
                         <div class="info-box wide"><label>Permanent Address</label>
-                            <div><?= field_value($isEditMode, 'permanent_address', $candidate['permanent_address'] ?? '', 'textarea') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'permanent_address', $candidate['permanent_address'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>City</label>
@@ -746,30 +1030,42 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                         </div>
 
                         <div class="info-box wide"><label>Career Goals</label>
-                            <div><?= field_value($isEditMode, 'career_goals', $candidate['career_goals'] ?? '', 'textarea') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'career_goals', $candidate['career_goals'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
                         <div class="info-box wide"><label>Interest in Field</label>
-                            <div><?= field_value($isEditMode, 'interest_in_field', $candidate['interest_in_field'] ?? '', 'textarea') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'interest_in_field', $candidate['interest_in_field'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
                         <div class="info-box wide"><label>Scheduled Exam</label>
-                            <div><?= field_value($isEditMode, 'scheduled_exam', $candidate['scheduled_exam'] ?? '', 'textarea') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'scheduled_exam', $candidate['scheduled_exam'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
 
                         <div class="info-box wide"><label>Strengths</label>
-                            <div><?= field_value($isEditMode, 'strengths', $candidate['strengths'] ?? '', 'textarea') ?></div>
+                            <div><?= field_value($isEditMode, 'strengths', $candidate['strengths'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
                         <div class="info-box wide"><label>Weakness</label>
-                            <div><?= field_value($isEditMode, 'weakness', $candidate['weakness'] ?? '', 'textarea') ?></div>
+                            <div><?= field_value($isEditMode, 'weakness', $candidate['weakness'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>EPF Registered</label>
-                            <div><?= field_value($isEditMode, 'epf_registered', $candidate['epf_registered'] ?? '', 'select', ['Yes', 'No']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'epf_registered', $candidate['epf_registered'] ?? '', 'select', ['Yes', 'No']) ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>UAN No</label>
                             <div><?= field_value($isEditMode, 'uan_no', $candidate['uan_no'] ?? '') ?></div>
                         </div>
                         <div class="info-box"><label>ESIC Registered</label>
-                            <div><?= field_value($isEditMode, 'esic_registered', $candidate['esic_registered'] ?? '', 'select', ['Yes', 'No']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'esic_registered', $candidate['esic_registered'] ?? '', 'select', ['Yes', 'No']) ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>IP No</label>
@@ -783,37 +1079,50 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                         </div>
 
                         <div class="info-box"><label>Bank Account No</label>
-                            <div><?= field_value($isEditMode, 'bank_account_no', $candidate['bank_account_no'] ?? '') ?></div>
+                            <div><?= field_value($isEditMode, 'bank_account_no', $candidate['bank_account_no'] ?? '') ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>IFSC Code</label>
                             <div><?= field_value($isEditMode, 'ifsc_code', $candidate['ifsc_code'] ?? '') ?></div>
                         </div>
                         <div class="info-box"><label>Weekly Working Days</label>
-                            <div><?= field_value($isEditMode, 'weekly_working_days', $candidate['weekly_working_days'] ?? '') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'weekly_working_days', $candidate['weekly_working_days'] ?? '') ?>
+                            </div>
                         </div>
 
                         <div class="info-box"><label>Smoking</label>
-                            <div><?= field_value($isEditMode, 'smoking', $candidate['smoking'] ?? '', 'select', ['Yes', 'No']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'smoking', $candidate['smoking'] ?? '', 'select', ['Yes', 'No']) ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Self Vehicle</label>
-                            <div><?= field_value($isEditMode, 'self_vehicle', $candidate['self_vehicle'] ?? '', 'select', ['Yes', 'No']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'self_vehicle', $candidate['self_vehicle'] ?? '', 'select', ['Yes', 'No']) ?>
+                            </div>
                         </div>
                         <div class="info-box"><label>Driving Licence</label>
-                            <div><?= field_value($isEditMode, 'driving_licence', $candidate['driving_licence'] ?? '', 'select', ['Yes', 'No']) ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'driving_licence', $candidate['driving_licence'] ?? '', 'select', ['Yes', 'No']) ?>
+                            </div>
                         </div>
 
                         <div class="info-box wide"><label>Medical Issue</label>
-                            <div><?= field_value($isEditMode, 'medical_issue', $candidate['medical_issue'] ?? '', 'textarea') ?></div>
+                            <div>
+                                <?= field_value($isEditMode, 'medical_issue', $candidate['medical_issue'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
                         <div class="info-box wide"><label>Hobbies</label>
-                            <div><?= field_value($isEditMode, 'hobbies', $candidate['hobbies'] ?? '', 'textarea') ?></div>
+                            <div><?= field_value($isEditMode, 'hobbies', $candidate['hobbies'] ?? '', 'textarea') ?>
+                            </div>
                         </div>
 
                         <div class="info-box">
                             <label>Resume</label>
                             <div>
                                 <?php if (!empty($candidate['resume_path'])): ?>
-                                    <a href="<?= h($candidate['resume_path']) ?>" target="_blank" rel="noopener noreferrer">Open Resume</a>
+                                    <a href="<?= h($candidate['resume_path']) ?>" target="_blank"
+                                        rel="noopener noreferrer">Open Resume</a>
                                 <?php else: ?>
                                     -
                                 <?php endif; ?>
@@ -824,7 +1133,8 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                             <label>Photo</label>
                             <div>
                                 <?php if (!empty($candidate['photo_path'])): ?>
-                                    <a href="<?= h($candidate['photo_path']) ?>" target="_blank" rel="noopener noreferrer">Open Photo</a>
+                                    <a href="<?= h($candidate['photo_path']) ?>" target="_blank"
+                                        rel="noopener noreferrer">Open Photo</a>
                                 <?php else: ?>
                                     -
                                 <?php endif; ?>
@@ -858,11 +1168,16 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                                         <tr>
                                             <?php if ($isEditMode): ?>
                                                 <input type="hidden" name="academics[id][]" value="<?= (int) $row['id'] ?>">
-                                                <td><input type="text" name="academics[level_name][]" value="<?= h($row['level_name'] ?? '') ?>"></td>
-                                                <td><input type="text" name="academics[subject][]" value="<?= h($row['subject'] ?? '') ?>"></td>
-                                                <td><input type="text" name="academics[institute][]" value="<?= h($row['institute'] ?? '') ?>"></td>
-                                                <td><input type="text" name="academics[passing_year][]" value="<?= h($row['passing_year'] ?? '') ?>"></td>
-                                                <td><input type="text" name="academics[percentage][]" value="<?= h($row['percentage'] ?? '') ?>"></td>
+                                                <td><input type="text" name="academics[level_name][]"
+                                                        value="<?= h($row['level_name'] ?? '') ?>"></td>
+                                                <td><input type="text" name="academics[subject][]"
+                                                        value="<?= h($row['subject'] ?? '') ?>"></td>
+                                                <td><input type="text" name="academics[institute][]"
+                                                        value="<?= h($row['institute'] ?? '') ?>"></td>
+                                                <td><input type="text" name="academics[passing_year][]"
+                                                        value="<?= h($row['passing_year'] ?? '') ?>"></td>
+                                                <td><input type="text" name="academics[percentage][]"
+                                                        value="<?= h($row['percentage'] ?? '') ?>"></td>
                                             <?php else: ?>
                                                 <td><?= h($row['level_name'] ?? '') ?></td>
                                                 <td><?= h($row['subject'] ?? '') ?></td>
@@ -902,12 +1217,18 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                                         <tr>
                                             <?php if ($isEditMode): ?>
                                                 <input type="hidden" name="experiences[id][]" value="<?= (int) $row['id'] ?>">
-                                                <td><input type="text" name="experiences[company_name][]" value="<?= h($row['company_name'] ?? '') ?>"></td>
-                                                <td><input type="text" name="experiences[designation][]" value="<?= h($row['designation'] ?? '') ?>"></td>
-                                                <td><input type="text" name="experiences[from_date][]" value="<?= h($row['from_date'] ?? '') ?>"></td>
-                                                <td><input type="text" name="experiences[to_date][]" value="<?= h($row['to_date'] ?? '') ?>"></td>
-                                                <td><input type="text" name="experiences[salary_ctc][]" value="<?= h($row['salary_ctc'] ?? '') ?>"></td>
-                                                <td><input type="text" name="experiences[reason_for_leaving][]" value="<?= h($row['reason_for_leaving'] ?? '') ?>"></td>
+                                                <td><input type="text" name="experiences[company_name][]"
+                                                        value="<?= h($row['company_name'] ?? '') ?>"></td>
+                                                <td><input type="text" name="experiences[designation][]"
+                                                        value="<?= h($row['designation'] ?? '') ?>"></td>
+                                                <td><input type="text" name="experiences[from_date][]"
+                                                        value="<?= h($row['from_date'] ?? '') ?>"></td>
+                                                <td><input type="text" name="experiences[to_date][]"
+                                                        value="<?= h($row['to_date'] ?? '') ?>"></td>
+                                                <td><input type="text" name="experiences[salary_ctc][]"
+                                                        value="<?= h($row['salary_ctc'] ?? '') ?>"></td>
+                                                <td><input type="text" name="experiences[reason_for_leaving][]"
+                                                        value="<?= h($row['reason_for_leaving'] ?? '') ?>"></td>
                                             <?php else: ?>
                                                 <td><?= h($row['company_name'] ?? '') ?></td>
                                                 <td><?= h($row['designation'] ?? '') ?></td>
@@ -946,10 +1267,14 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                                         <tr>
                                             <?php if ($isEditMode): ?>
                                                 <input type="hidden" name="references[id][]" value="<?= (int) $row['id'] ?>">
-                                                <td><input type="text" name="references[ref_name][]" value="<?= h($row['ref_name'] ?? '') ?>"></td>
-                                                <td><input type="text" name="references[designation][]" value="<?= h($row['designation'] ?? '') ?>"></td>
-                                                <td><input type="email" name="references[email][]" value="<?= h($row['email'] ?? '') ?>"></td>
-                                                <td><input type="text" name="references[mobile][]" value="<?= h($row['mobile'] ?? '') ?>"></td>
+                                                <td><input type="text" name="references[ref_name][]"
+                                                        value="<?= h($row['ref_name'] ?? '') ?>"></td>
+                                                <td><input type="text" name="references[designation][]"
+                                                        value="<?= h($row['designation'] ?? '') ?>"></td>
+                                                <td><input type="email" name="references[email][]"
+                                                        value="<?= h($row['email'] ?? '') ?>"></td>
+                                                <td><input type="text" name="references[mobile][]"
+                                                        value="<?= h($row['mobile'] ?? '') ?>"></td>
                                             <?php else: ?>
                                                 <td><?= h($row['ref_name'] ?? '') ?></td>
                                                 <td><?= h($row['designation'] ?? '') ?></td>
@@ -985,9 +1310,12 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                                         <tr>
                                             <?php if ($isEditMode): ?>
                                                 <input type="hidden" name="family[id][]" value="<?= (int) $row['id'] ?>">
-                                                <td><input type="text" name="family[member_name][]" value="<?= h($row['member_name'] ?? '') ?>"></td>
-                                                <td><input type="text" name="family[relation_name][]" value="<?= h($row['relation_name'] ?? '') ?>"></td>
-                                                <td><input type="text" name="family[occupation][]" value="<?= h($row['occupation'] ?? '') ?>"></td>
+                                                <td><input type="text" name="family[member_name][]"
+                                                        value="<?= h($row['member_name'] ?? '') ?>"></td>
+                                                <td><input type="text" name="family[relation_name][]"
+                                                        value="<?= h($row['relation_name'] ?? '') ?>"></td>
+                                                <td><input type="text" name="family[occupation][]"
+                                                        value="<?= h($row['occupation'] ?? '') ?>"></td>
                                             <?php else: ?>
                                                 <td><?= h($row['member_name'] ?? '') ?></td>
                                                 <td><?= h($row['relation_name'] ?? '') ?></td>
@@ -1032,7 +1360,13 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                                 <div class="feedback-card">
                                     <h5><?= h($fb['round_name'] ?? ('Round ' . (int) $fb['round_no'])) ?></h5>
                                     <p><strong>Manager:</strong> <?= h($fb['manager_name'] ?? '-') ?></p>
-                                    <p><strong>Recommendation:</strong> <?= h($fb['recommendation'] ?? '') ?></p>
+                                    <?php
+                                    $fbStatus = normalize_status_label($fb['recommendation'] ?? '');
+                                    if (!in_array($fbStatus, ['select', 'reject', 'hold'], true)) {
+                                        $fbStatus = '-';
+                                    }
+                                    ?>
+                                    <p><strong>Recommendation:</strong> <?= h($fbStatus) ?></p>
                                     <p><strong>Remarks:</strong> <?= nl2br(h($fb['remark_text'] ?? '')) ?></p>
                                     <p><strong>Submitted At:</strong> <?= h($fb['created_at'] ?? '') ?></p>
                                 </div>
@@ -1050,8 +1384,14 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                     <?php if ($statusLogs): ?>
                         <div class="stack-list">
                             <?php foreach ($statusLogs as $row): ?>
+                                <?php
+                                $displayStatus = normalize_status_label($row['new_status'] ?? '');
+                                if (!in_array($displayStatus, ['select', 'reject', 'hold'], true)) {
+                                    continue;
+                                }
+                                ?>
                                 <div class="stack-card">
-                                    <h5><?= h($row['new_status'] ?? 'status') ?></h5>
+                                    <h5><?= h($displayStatus) ?></h5>
                                     <p><strong>Date:</strong> <?= h($row['created_at'] ?? '') ?></p>
                                     <p><strong>Action Role:</strong> <?= h($row['action_role'] ?? '') ?></p>
                                     <p><strong>Note:</strong> <?= nl2br(h($row['note'] ?? '')) ?></p>
