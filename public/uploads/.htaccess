@@ -1,0 +1,14 @@
+# Disable directory listing
+Options -Indexes
+
+# Disable PHP execution
+php_flag engine off
+
+<FilesMatch "\.(php|php5|php7|php8|phtml|phar)$">
+    Require all denied
+</FilesMatch>
+
+# Block sensitive files
+<FilesMatch "\.(htaccess|htpasswd|ini|log|env|sql|bak)$">
+    Require all denied
+</FilesMatch>

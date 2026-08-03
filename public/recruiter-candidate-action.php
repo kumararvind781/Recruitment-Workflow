@@ -175,6 +175,7 @@ h2{margin:0 0 18px;font-size:28px;color:#2f2640}
                 </form>
 
                 <form method="post">
+    <?= csrf_field(); ?>
                     <input type="hidden" name="action" value="direct_select">
                     <div class="field">
                         <label>Select note</label>
@@ -219,6 +220,7 @@ h2{margin:0 0 18px;font-size:28px;color:#2f2640}
                 </form>
 
                 <form method="post">
+    <?= csrf_field(); ?>
                     <input type="hidden" name="action" value="final_reject">
                     <div class="field">
                         <label>Final reject reason</label>

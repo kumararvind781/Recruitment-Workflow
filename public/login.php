@@ -59,6 +59,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($validPassword) {
+
+            // Prevent Session Fixation
+            session_regenerate_id(true);
+
+            $_SESSION['LAST_ACTIVITY'] = time();
+
             $_SESSION['user'] = [
                 'id' => $user['id'],
                 'name' => $user['full_name'],
@@ -84,6 +90,14 @@ $title = 'Login';
 include __DIR__ . '/../app/views/layouts/header.php';
 ?>
 
+<?php if(isset($_GET['timeout'])): ?>
+
+<div class="notice error">
+    Your session expired. Please login again.
+</div>
+
+<?php endif; ?>
+
 <div class="login-shell">
     <div class="login-card card">
         <div class="section-title">
@@ -96,6 +110,7 @@ include __DIR__ . '/../app/views/layouts/header.php';
         <?php endif; ?>
 
         <form method="post">
+    <?= csrf_field(); ?>
             <div class="form-group">
                 <label>Username or Email</label>
                 <input type="text" name="username" required>

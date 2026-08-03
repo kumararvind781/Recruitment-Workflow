@@ -375,6 +375,7 @@ include __DIR__ . '/../app/views/layouts/header.php';
             </div>
 
             <form method="post">
+    <?= csrf_field(); ?>
                 <label class="form-label">Recommendation</label>
                 <select name="recommendation">
                     <option value="hold">Hold</option>
