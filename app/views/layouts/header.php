@@ -4,6 +4,45 @@ if (session_status() === PHP_SESSION_NONE)
   session_start();
 $user = $_SESSION['user'] ?? null;
 $title = $title ?? 'UNIRE Recruitment Workflow';
+
+
+?>
+
+<?php
+require_once __DIR__ . '/../../helpers/auth.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+function normalize_status_label($status)
+{
+    $status = strtolower(trim((string)$status));
+
+    switch ($status) {
+        case 'selected':
+        case 'select':
+            return 'select';
+
+        case 'rejected':
+        case 'reject':
+            return 'reject';
+
+        case 'on hold':
+        case 'hold':
+            return 'hold';
+
+        case 'shortlisted':
+        case 'shortlist':
+            return 'shortlist';
+
+        default:
+            return $status;
+    }
+}
+
+$user = $_SESSION['user'] ?? null;
+$title = $title ?? 'UNIRE Recruitment Workflow';
 ?>
 <!DOCTYPE html>
 <html lang="en">

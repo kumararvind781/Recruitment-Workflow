@@ -7,6 +7,7 @@ session_start();
 require_once __DIR__ . '/../app/helpers/auth.php';
 require_once __DIR__ . '/../app/config/database.php';
 
+
 require_role(['admin', 'recruiter', 'manager']);
 
 if (!function_exists('h')) {
@@ -15,6 +16,28 @@ if (!function_exists('h')) {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     }
 }
+
+if (!function_exists('normalize_status_label')) {
+    function normalize_status_label($status)
+    {
+        $status = strtolower(trim((string)$status));
+
+        $map = [
+            'selected'    => 'select',
+            'select'      => 'select',
+            'rejected'    => 'reject',
+            'reject'      => 'reject',
+            'hold'        => 'hold',
+            'on hold'     => 'hold',
+            'shortlisted' => 'shortlist',
+            'shortlist'   => 'shortlist',
+        ];
+
+        return $map[$status] ?? $status;
+    }
+}
+
+$pdo = Database::connect();
 
 $pdo = Database::connect();
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
