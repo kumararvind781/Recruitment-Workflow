@@ -13,7 +13,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$sessionTimeout = 1800; // 30 Minutes
+$sessionTimeout = 3600; // 60 Minutes
 
 $current = time();
 
