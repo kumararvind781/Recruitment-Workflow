@@ -67,14 +67,19 @@ $params = [];
 if ($search !== '') {
     $sql .= "
         AND (
-            c.application_no LIKE :search
-            OR c.full_name LIKE :search
-            OR c.position_applied LIKE :search
-            OR c.current_status LIKE :search
+            c.application_no LIKE :search_app
+            OR c.full_name LIKE :search_name
+            OR c.position_applied LIKE :search_position
+            OR c.current_status LIKE :search_status
         )
     ";
 
-    $params[':search'] = '%' . $search . '%';
+    $searchValue = '%' . $search . '%';
+
+    $params[':search_app'] = $searchValue;
+    $params[':search_name'] = $searchValue;
+    $params[':search_position'] = $searchValue;
+    $params[':search_status'] = $searchValue;
 }
 
 /*
