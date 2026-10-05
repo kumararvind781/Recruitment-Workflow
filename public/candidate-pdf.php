@@ -94,19 +94,39 @@ function fileToDataUri($fullPath)
     }
 
     $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
-    $mimeMap = [
-        'jpg' => 'jpeg',
-        'jpeg' => 'jpeg',
-        'png' => 'png',
-        'gif' => 'gif',
-        'webp' => 'webp'
-    ];
 
-    if (!isset($mimeMap[$ext])) {
-        return '';
+    // JPG / JPEG
+    if ($ext === 'jpg' || $ext === 'jpeg') {
+        return 'data:image/jpeg;base64,' . base64_encode(file_get_contents($fullPath));
     }
 
-    return 'data:image/' . $mimeMap[$ext] . ';base64,' . base64_encode(file_get_contents($fullPath));
+    // PNG
+    if ($ext === 'png') {
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($fullPath));
+    }
+
+    // GIF
+    if ($ext === 'gif') {
+        return 'data:image/gif;base64,' . base64_encode(file_get_contents($fullPath));
+    }
+
+    // WEBP -> PNG conversion for Dompdf
+    if ($ext === 'webp' && function_exists('imagecreatefromwebp')) {
+
+        $image = @imagecreatefromwebp($fullPath);
+
+        if ($image !== false) {
+            ob_start();
+            imagepng($image);
+            $pngData = ob_get_clean();
+
+            imagedestroy($image);
+
+            return 'data:image/png;base64,' . base64_encode($pngData);
+        }
+    }
+
+    return '';
 }
 
 $logoBase64 = '';
