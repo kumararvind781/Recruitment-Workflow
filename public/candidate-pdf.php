@@ -438,8 +438,27 @@ $options->set('defaultFont', 'DejaVu Sans');
 $dompdf = new Dompdf($options);
 $dompdf->loadHtml($html);
 $dompdf->setPaper('A4', 'portrait');
-$dompdf->render();
 
-$fileName = 'candidate-summary-' . preg_replace('/[^A-Za-z0-9_\-]/', '-', ($candidate['application_no'] ?? (string)$id)) . '.pdf';
+try {
+    $dompdf->render();
+} catch (Throwable $e) {
+    echo '<pre>';
+    echo "PDF RENDER ERROR\n\n";
+    echo $e->getMessage() . "\n\n";
+    echo $e->getFile() . ':' . $e->getLine() . "\n";
+    echo '</pre>';
+    exit;
+}
+
+if (ob_get_length()) {
+    ob_end_clean();
+}
+
+$fileName = 'candidate-summary-' . preg_replace(
+    '/[^A-Za-z0-9_\-]/',
+    '-',
+    ($candidate['application_no'] ?? (string)$id)
+) . '.pdf';
+
 $dompdf->stream($fileName, ['Attachment' => false]);
 exit;
