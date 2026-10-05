@@ -263,6 +263,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'ca
         $selfVehicle = trim($_POST['self_vehicle'] ?? '');
         $drivingLicence = trim($_POST['driving_licence'] ?? '');
 
+        // Keep existing files by default
+$photoPath = $candidate['photo_path'] ?? '';
+$resumePath = $candidate['resume_path'] ?? '';
+
+/* =========================
+   PHOTO UPLOAD / REPLACE
+   ========================= */
+if (
+    isset($_FILES['photo']) &&
+    $_FILES['photo']['error'] === UPLOAD_ERR_OK &&
+    !empty($_FILES['photo']['tmp_name'])
+) {
+    $photoName = time() . '_' . bin2hex(random_bytes(4)) . '_' .
+        basename($_FILES['photo']['name']);
+
+    $newPhotoPath = 'uploads/photos/' . $photoName;
+    $newPhotoFile = __DIR__ . '/' . $newPhotoPath;
+
+    if (move_uploaded_file($_FILES['photo']['tmp_name'], $newPhotoFile)) {
+
+        // Delete old photo only after new upload succeeds
+        if (!empty($photoPath)) {
+            $oldPhotoFile = __DIR__ . '/' . ltrim($photoPath, '/');
+
+            if (is_file($oldPhotoFile) && $oldPhotoFile !== $newPhotoFile) {
+                unlink($oldPhotoFile);
+            }
+        }
+
+        $photoPath = $newPhotoPath;
+    }
+}
+
+/* =========================
+   RESUME UPLOAD / REPLACE
+   ========================= */
+if (
+    isset($_FILES['resume']) &&
+    $_FILES['resume']['error'] === UPLOAD_ERR_OK &&
+    !empty($_FILES['resume']['tmp_name'])
+) {
+    $resumeName = time() . '_' . bin2hex(random_bytes(4)) . '_' .
+        basename($_FILES['resume']['name']);
+
+    $newResumePath = 'uploads/resume/' . $resumeName;
+    $newResumeFile = __DIR__ . '/' . $newResumePath;
+
+    if (move_uploaded_file($_FILES['resume']['tmp_name'], $newResumeFile)) {
+
+        // Delete old resume only after new upload succeeds
+        if (!empty($resumePath)) {
+            $oldResumeFile = __DIR__ . '/' . ltrim($resumePath, '/');
+
+            if (is_file($oldResumeFile) && $oldResumeFile !== $newResumeFile) {
+                unlink($oldResumeFile);
+            }
+        }
+
+        $resumePath = $newResumePath;
+    }
+}
+
         $updateCandidate = $pdo->prepare("
             UPDATE candidates
             SET
@@ -557,30 +619,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
 
     return '<input type="' . h($type) . '" name="' . h($name) . '" value="' . h((string) $value) . '">';
 }
-
-$photoPath = $candidate['photo_path'];
-$resumePath = $candidate['resume_path'];
-
-if (!empty($_FILES['photo']['name'])) {
-
-    $photoName = time() . '_' . basename($_FILES['photo']['name']);
-    $target = 'uploads/photos/' . $photoName;
-
-    move_uploaded_file($_FILES['photo']['tmp_name'], $target);
-
-    $photoPath = $target;
-}
-
-if (!empty($_FILES['resume']['name'])) {
-
-    $resumeName = time() . '_' . basename($_FILES['resume']['name']);
-    $target = 'uploads/resume/' . $resumeName;
-
-    move_uploaded_file($_FILES['resume']['tmp_name'], $target);
-
-    $resumePath = $target;
-}
-?>
+ ?>
 
 <style>
     * {
