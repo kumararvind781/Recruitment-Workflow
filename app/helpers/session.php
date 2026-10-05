@@ -13,8 +13,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$sessionTimeout = 3600; // 60 Minutes
-
+$sessionTimeout = 3600; // 60 minutes
 $current = time();
 
 if (isset($_SESSION['LAST_ACTIVITY'])) {
@@ -32,3 +31,8 @@ if (isset($_SESSION['LAST_ACTIVITY'])) {
 }
 
 $_SESSION['LAST_ACTIVITY'] = $current;
+
+// Remaining session time
+$remainingTime = $sessionTimeout;
+
+?>

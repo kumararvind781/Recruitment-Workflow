@@ -1,16 +1,32 @@
 <?php
-class Database {
+
+class Database
+{
     private static $pdo = null;
-    public static function connect() {
+
+    public static function connect()
+    {
         if (self::$pdo === null) {
-            $config = require __DIR__ . '/config.php';
-            $db = $config['db'];
-            $dsn = "mysql:host={$db['host']};dbname={$db['dbname']};charset={$db['charset']}";
-            self::$pdo = new PDO($dsn, $db['username'], $db['password'], [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
+
+            // Load database configuration
+            require_once __DIR__ . '/config.php';
+
+            $dsn = "mysql:host=" . DB_HOST .
+                   ";dbname=" . DB_NAME .
+                   ";charset=" . CHARSET;
+
+            self::$pdo = new PDO(
+                $dsn,
+                DB_USER,
+                DB_PASS,
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                ]
+            );
         }
+
         return self::$pdo;
     }
 }
