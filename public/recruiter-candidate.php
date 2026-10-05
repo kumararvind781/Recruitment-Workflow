@@ -7,7 +7,7 @@ session_start();
 require_once __DIR__ . '/../app/helpers/auth.php';
 require_once __DIR__ . '/../app/config/database.php';
 
-
+require_once __DIR__ . '/../app/helpers/csrf.php';
 require_role(['admin', 'recruiter', 'manager']);
 
 if (!function_exists('h')) {
@@ -20,17 +20,17 @@ if (!function_exists('h')) {
 if (!function_exists('normalize_status_label')) {
     function normalize_status_label($status)
     {
-        $status = strtolower(trim((string)$status));
+        $status = strtolower(trim((string) $status));
 
         $map = [
-            'selected'    => 'select',
-            'select'      => 'select',
-            'rejected'    => 'reject',
-            'reject'      => 'reject',
-            'hold'        => 'hold',
-            'on hold'     => 'hold',
+            'selected' => 'select',
+            'select' => 'select',
+            'rejected' => 'reject',
+            'reject' => 'reject',
+            'hold' => 'hold',
+            'on hold' => 'hold',
             'shortlisted' => 'shortlist',
-            'shortlist'   => 'shortlist',
+            'shortlist' => 'shortlist',
         ];
 
         return $map[$status] ?? $status;
@@ -55,6 +55,162 @@ $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$candidate) {
     exit('Candidate not found');
+}
+
+$examAttempt = null;
+
+if (strcasecmp(trim($candidate['position_applied']), 'Process Associate') === 0) {
+
+    $stmt = $pdo->prepare("
+        SELECT
+            id,
+            total_questions,
+            attempted_questions,
+            correct_answers,
+            wrong_answers,
+            unattempted_questions,
+            total_marks,
+            obtained_marks,
+            percentage,
+            status,
+            started_at,
+            submitted_at
+        FROM exam_attempts
+        WHERE candidate_id = ?
+          AND exam_type = 'process_associate'
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+
+    $stmt->execute([
+        $candidate['id']
+    ]);
+
+    $examAttempt = $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Process Associate Exam Login
+|--------------------------------------------------------------------------
+| Generate once and show credentials in a popup on the same page.
+*/
+
+$examAccess = null;
+$generatedExamUsername = null;
+$generatedExamPassword = null;
+$showExamLoginModal = false;
+$examLoginError = '';
+
+$isProcessAssociate =
+    strcasecmp(trim($candidate['position_applied'] ?? ''), 'Process Associate') === 0;
+
+/*
+|--------------------------------------------------------------------------
+| Generate Process Associate Exam Login
+|--------------------------------------------------------------------------
+*/
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['form_type'] ?? '') === 'generate_exam_login'
+) {
+    if (!$isProcessAssociate) {
+        $examLoginError = 'Exam login is only available for Process Associate.';
+    } else {
+        try {
+            // Check whether login already exists.
+            $stmt = $pdo->prepare("
+                SELECT *
+                FROM exam_access
+                WHERE candidate_id = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$candidate['id']]);
+            $existingAccess = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($existingAccess) {
+                // Do not create another login.
+                $examAccess = $existingAccess;
+                $generatedExamUsername = $existingAccess['username'];
+                $showExamLoginModal = true;
+            } else {
+                // Random username.
+                $username = 'PA-' . strtoupper(
+                    substr(bin2hex(random_bytes(4)), 0, 6)
+                );
+
+                // Random password.
+                $characters =
+                    'ABCDEFGHJKLMNPQRSTUVWXYZ' .
+                    'abcdefghijkmnopqrstuvwxyz' .
+                    '23456789' .
+                    '@#$%';
+
+                $password = '';
+                $max = strlen($characters) - 1;
+
+                for ($i = 0; $i < 10; $i++) {
+                    $password .= $characters[random_int(0, $max)];
+                }
+
+                $passwordHash = password_hash(
+                    $password,
+                    PASSWORD_DEFAULT
+                );
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO exam_access
+                    (
+                        candidate_id,
+                        username,
+                        password_hash,
+                        is_active
+                    )
+                    VALUES
+                    (
+                        ?,
+                        ?,
+                        ?,
+                        1
+                    )
+                ");
+
+                $stmt->execute([
+                    $candidate['id'],
+                    $username,
+                    $passwordHash
+                ]);
+
+                $examAccess = [
+                    'username' => $username,
+                    'is_active' => 1
+                ];
+
+                $generatedExamUsername = $username;
+                $generatedExamPassword = $password;
+                $showExamLoginModal = true;
+            }
+        } catch (Throwable $e) {
+            $examLoginError = 'Unable to generate exam login: ' . $e->getMessage();
+        }
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Existing Exam Login
+|--------------------------------------------------------------------------
+*/
+if ($isProcessAssociate && !$examAccess) {
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM exam_access
+        WHERE candidate_id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$candidate['id']]);
+    $examAccess = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'candidate_update') {
@@ -154,9 +310,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'ca
                 medical_issue = ?,
                 smoking = ?,
                 self_vehicle = ?,
-                driving_licence = ?
-                photo_path = ?,
-                resume_path = ?
+                driving_licence = ?,
+photo_path = ?,
+resume_path = ?
             WHERE id = ?
         ");
         $updateCandidate->execute([
@@ -862,6 +1018,82 @@ if (!empty($_FILES['resume']['name'])) {
     .app-card .btn {
         align-self: flex-start;
     }
+
+    /* Exam login modal */
+    .exam-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(44, 35, 55, .45);
+    }
+
+    .exam-modal-card {
+        width: 100%;
+        max-width: 460px;
+        background: #fff;
+        border-radius: 18px;
+        padding: 26px;
+        box-shadow: 0 20px 60px rgba(44, 35, 55, .25);
+    }
+
+    .exam-modal-card h3 {
+        margin: 0 0 20px;
+        color: #2d2340;
+        font-size: 22px;
+    }
+
+    .exam-login-row {
+        margin-bottom: 14px;
+    }
+
+    .exam-login-row label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #887a97;
+        text-transform: uppercase;
+    }
+
+    .exam-login-value {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border: 1px solid #eadfeb;
+        border-radius: 10px;
+        background: #fcfafc;
+        font-weight: 700;
+        color: #2d2340;
+    }
+
+    .exam-copy {
+        border: 0;
+        border-radius: 8px;
+        padding: 7px 10px;
+        cursor: pointer;
+        background: #f5dff0;
+        color: #b23284;
+        font-weight: 700;
+    }
+
+    .exam-modal-close {
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .acc-body p {
+        margin: 8px 0;
+    }
+
+    .acc-body {
+        padding-left: 20px;
+    }
 </style>
 
 <div class="container">
@@ -925,6 +1157,22 @@ if (!empty($_FILES['resume']['name'])) {
                 Preview Summary PDF
             </a>
 
+            <?php if ($isProcessAssociate): ?>
+
+                <form method="POST" style="display:inline;">
+
+                    <input type="hidden" name="form_type" value="generate_exam_login">
+
+                    <?= csrf_field() ?>
+
+                    <button type="submit" class="btn">
+                        Generate Exam Login
+                    </button>
+
+                </form>
+
+            <?php endif; ?>
+
         </div>
 
         <!-- <div class="sum-card">
@@ -950,13 +1198,18 @@ if (!empty($_FILES['resume']['name'])) {
                     <a class="btn btn-orange" href="recruiter-candidate-action.php?id=<?= (int) $candidate['id'] ?>">Take
                         Action</a>
                 <?php endif; ?>
+
+
             </div>
+
+
         </div>
     </div>
 
     <?php if ($isEditMode): ?>
         <form method="post" id="candidateEditForm" enctype="multipart/form-data">
             <input type="hidden" name="form_type" value="candidate_update">
+            <?= csrf_field() ?>
         <?php endif; ?>
 
         <div class="accordion-wrap">
@@ -1221,9 +1474,13 @@ if (!empty($_FILES['resume']['name'])) {
                         <div class="info-box"><label>Applied At</label>
                             <div><?= h($candidate['applied_at'] ?? '') ?></div>
                         </div>
+
+
                     </div>
                 </div>
             </details>
+
+
 
             <details class="acc-item">
                 <summary>Academic Details</summary>
@@ -1409,6 +1666,88 @@ if (!empty($_FILES['resume']['name'])) {
                 </div>
             </details>
 
+            <?php if (strcasecmp(trim($candidate['position_applied']), 'Process Associate') === 0): ?>
+
+                <details class="acc-item">
+
+                    <summary>Exam Details</summary>
+
+                    <div class="acc-body">
+
+                        <?php if (!$examAttempt): ?>
+
+                            <p><strong>No Exam</strong></p>
+
+                        <?php else: ?>
+
+                            <div style="display:grid; grid-template-columns:180px 1fr; gap:10px 20px; max-width:600px;">
+
+                                <strong>Status:</strong>
+                                <span>
+                                    <?= h(ucfirst($examAttempt['status'])) ?>
+                                </span>
+
+                                <strong>Total Questions:</strong>
+                                <span>
+                                    <?= (int) $examAttempt['total_questions'] ?>
+                                </span>
+
+                                <strong>Attempted:</strong>
+                                <span>
+                                    <?= (int) $examAttempt['attempted_questions'] ?>
+                                </span>
+
+                                <strong>Correct:</strong>
+                                <span>
+                                    <?= (int) $examAttempt['correct_answers'] ?>
+                                </span>
+
+                                <strong>Wrong:</strong>
+                                <span>
+                                    <?= (int) $examAttempt['wrong_answers'] ?>
+                                </span>
+
+                                <strong>Unattempted:</strong>
+                                <span>
+                                    <?= (int) $examAttempt['unattempted_questions'] ?>
+                                </span>
+
+                                <strong>Marks:</strong>
+                                <span>
+                                    <?= h($examAttempt['obtained_marks']) ?>
+                                    /
+                                    <?= h($examAttempt['total_marks']) ?>
+                                </span>
+
+                                <strong>Percentage:</strong>
+                                <span>
+                                    <?= h($examAttempt['percentage']) ?>%
+                                </span>
+
+                            </div>
+
+                            <?php if ($examAttempt['status'] === 'completed'): ?>
+
+                                <div style="margin-top:20px;">
+
+                                    <a href="unire_exam_paper.php?attempt_id=<?= (int) $examAttempt['id'] ?>" target="_blank"
+                                        class="btn">
+                                        Full Paper PDF
+                                    </a>
+
+                                </div>
+
+                            <?php endif; ?>
+
+                        <?php endif; ?>
+
+                    </div>
+
+                </details>
+
+            <?php endif; ?>
+
+
             <details class="acc-item">
                 <summary>Interview Rounds</summary>
                 <div class="acc-body">
@@ -1486,5 +1825,69 @@ if (!empty($_FILES['resume']['name'])) {
         </form>
     <?php endif; ?>
 </div>
+
+
+<?php if ($showExamLoginModal && $isProcessAssociate): ?>
+    <div class="exam-modal" id="examLoginModal">
+        <div class="exam-modal-card">
+            <h3>Exam Login Generated</h3>
+
+            <div class="exam-login-row">
+                <label>Username</label>
+                <div class="exam-login-value">
+                    <span id="examUsername"><?= h($generatedExamUsername) ?></span>
+                    <button type="button" class="exam-copy" onclick="copyExamValue('examUsername')">Copy</button>
+                </div>
+            </div>
+
+            <?php if ($generatedExamPassword !== null): ?>
+                <div class="exam-login-row">
+                    <label>Password</label>
+                    <div class="exam-login-value">
+                        <span id="examPassword"><?= h($generatedExamPassword) ?></span>
+                        <button type="button" class="exam-copy" onclick="copyExamValue('examPassword')">Copy</button>
+                    </div>
+                </div>
+
+                <p style="margin:12px 0 0;color:#777;font-size:13px;">
+                    Save this password now. It will not be shown again.
+                </p>
+            <?php else: ?>
+                <p style="margin:12px 0 0;color:#777;font-size:13px;">
+                    This login was already generated earlier. The password
+                    cannot be displayed again.
+                </p>
+            <?php endif; ?>
+
+            <button type="button" class="btn exam-modal-close" onclick="closeExamLoginModal()">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function closeExamLoginModal() {
+            const modal = document.getElementById('examLoginModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        function copyExamValue(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+                alert('Copied');
+            });
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeExamLoginModal();
+            }
+        });
+    </script>
+<?php endif; ?>
 
 <?php include __DIR__ . '/../app/views/layouts/footer.php'; ?>
