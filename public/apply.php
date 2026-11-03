@@ -1,6 +1,7 @@
 <?php
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 session_start();
 
 require_once __DIR__ . '/../app/config/database.php';
@@ -21,38 +22,95 @@ function post($key, $default = '')
     return trim($_POST[$key] ?? $default);
 }
 
+
 function uploadFile($fileKey, $targetDir, array $allowedExt)
 {
-    if (!isset($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE) {
+    if (!isset($_FILES[$fileKey])) {
         return null;
     }
 
-    if ($_FILES[$fileKey]['error'] !== UPLOAD_ERR_OK) {
-        throw new Exception("Upload failed for {$fileKey}.");
+    $file = $_FILES[$fileKey];
+
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
     }
 
-    if (!is_dir($targetDir) && !mkdir($targetDir, 0777, true)) {
-        throw new Exception("Unable to create upload directory.");
+    // Maximum allowed size
+    $maxSize = ($fileKey === 'resume')
+        ? 10 * 1024 * 1024   // Resume: 10 MB
+        : 5 * 1024 * 1024;   // Photo: 5 MB
+
+    // PHP upload errors
+    $uploadErrors = [
+        UPLOAD_ERR_INI_SIZE => 'File exceeds the server upload_max_filesize limit.',
+        UPLOAD_ERR_FORM_SIZE => 'File exceeds the form upload size limit.',
+        UPLOAD_ERR_PARTIAL => 'File was only partially uploaded. Please try again.',
+        UPLOAD_ERR_NO_TMP_DIR => 'Server temporary upload folder is missing.',
+        UPLOAD_ERR_CANT_WRITE => 'Server could not write the uploaded file. Check disk space and permissions.',
+        UPLOAD_ERR_EXTENSION => 'Upload was stopped by a PHP extension.'
+    ];
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $message = $uploadErrors[$file['error']]
+            ?? 'Unknown upload error. Error code: ' . $file['error'];
+
+        throw new Exception(ucfirst($fileKey) . ': ' . $message);
     }
 
-    $originalName = $_FILES[$fileKey]['name'];
-    $tmpName = $_FILES[$fileKey]['tmp_name'];
+    if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+        throw new Exception(ucfirst($fileKey) . ': Temporary uploaded file is missing.');
+    }
+
+    if ($file['size'] <= 0) {
+        throw new Exception(ucfirst($fileKey) . ': The selected file is empty.');
+    }
+
+    if ($file['size'] > $maxSize) {
+        throw new Exception(
+            ucfirst($fileKey) . ': Maximum allowed size is ' .
+            ($maxSize / 1024 / 1024) . ' MB. Selected file is ' .
+            round($file['size'] / 1024 / 1024, 2) . ' MB.'
+        );
+    }
+
+    $originalName = basename($file['name']);
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
     if (!in_array($ext, $allowedExt, true)) {
-        throw new Exception("Invalid file type for {$fileKey}.");
+        throw new Exception(
+            ucfirst($fileKey) . ': Invalid format. Allowed formats: ' .
+            implode(', ', $allowedExt)
+        );
     }
 
-    $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
-    $newName = time() . '_' . $fileKey . '_' . $safeBase . '.' . $ext;
+    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true)) {
+        throw new Exception(ucfirst($fileKey) . ': Unable to create upload folder.');
+    }
+
+    if (!is_writable($targetDir)) {
+        throw new Exception(ucfirst($fileKey) . ': Upload folder is not writable.');
+    }
+
+    $safeBase = preg_replace(
+        '/[^a-zA-Z0-9_-]/',
+        '_',
+        pathinfo($originalName, PATHINFO_FILENAME)
+    );
+
+    $newName = time() . '_' . bin2hex(random_bytes(5)) .
+        '_' . $safeBase . '.' . $ext;
+
     $fullPath = rtrim($targetDir, '/') . '/' . $newName;
 
-    if (!move_uploaded_file($tmpName, $fullPath)) {
-        throw new Exception("Failed to move uploaded file for {$fileKey}.");
+    if (!move_uploaded_file($file['tmp_name'], $fullPath)) {
+        throw new Exception(
+            ucfirst($fileKey) . ': Could not save file on server. Check folder permissions and disk space.'
+        );
     }
 
     return str_replace(__DIR__ . '/', '', $fullPath);
 }
+
 
 function generateApplicationNo(PDO $pdo)
 {
@@ -122,7 +180,16 @@ $boards = [
 
 $positionOptions = ['Process Associate', 'Operations', 'Accounts', 'Reservation'];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    empty($_POST) &&
+    empty($_FILES) &&
+    !empty($_SERVER['CONTENT_LENGTH'])
+) {
+    $error = 'Upload failed: Total form data exceeds the server post_max_size limit (32 MB). Please reduce file sizes and try again.';
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
     try {
         $fullName = post('full_name');
         $email = post('email');
@@ -164,9 +231,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('Please fill all required fields.');
         }
 
-        $resumePath = uploadFile('resume', __DIR__ . '/uploads/resumes', ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png']);
+        $resumePath = uploadFile('resume', __DIR__ . '/uploads/resumes', ['pdf', 'doc', 'docx']);
         $photoPath = uploadFile('photo', __DIR__ . '/uploads/photos', ['jpg', 'jpeg', 'png']);
 
+        if (empty($resumePath)) {
+            throw new Exception('Resume is required. Please upload your resume.');
+        }
+
+        if (empty($photoPath)) {
+            throw new Exception('Photo is required. Please upload your photo.');
+        }
         $pdo->beginTransaction();
 
         $applicationNo = generateApplicationNo($pdo);
@@ -401,11 +475,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $success = 'Application submitted successfully. Your application number is ' . $applicationNo;
         $_POST = [];
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
+
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        $error = $e->getMessage();
+
+        error_log('Recruitment Application Error: ' . $e->getMessage());
+
+        $error = $e instanceof Exception
+            ? $e->getMessage()
+            : 'A server error occurred. Please try again later.';
     }
 }
 ?>
@@ -685,7 +765,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <span class="pill">UNIRE CAREERS</span>
             <h2>Candidate Application Form</h2>
             <p>Fill your details, upload resume and passport-size photo, and submit your application for
-                <strong>Recruiter Review.</strong></p>
+                <strong>Recruiter Review.</strong>
+            </p>
         </div>
 
         <div class="card form-card">
@@ -792,7 +873,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <option value="">Select state</option>
                             <?php foreach ($states as $st => $cities): ?>
                                 <option value="<?= h($st) ?>" <?= (($_POST['state'] ?? '') === $st) ? 'selected' : '' ?>>
-                                    <?= h($st) ?></option>
+                                    <?= h($st) ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -1169,14 +1251,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mt-24"></div>
                 <h3 class="section-title">Uploads</h3>
                 <div class="grid">
+
                     <div class="field">
-                        <label>Resume *</label>
-                        <input type="file" name="resume" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
+                        <label>Resume * (PDF, DOC, DOCX | Maximum 10 MB)</label>
+                        <input type="file" name="resume" id="resume" accept=".pdf,.doc,.docx" required>
                     </div>
 
                     <div class="field">
-                        <label>Self Photo *</label>
-                        <input type="file" name="photo" accept=".jpg,.jpeg,.png" required>
+                        <label>Self Photo * (JPG, JPEG, PNG | Maximum 5 MB)</label>
+                        <input type="file" name="photo" id="photo" accept=".jpg,.jpeg,.png" required>
                     </div>
                 </div>
 
@@ -1342,6 +1425,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 e.target.closest('tr').remove();
             }
         });
+
+
+
+        // File validation
+        const resumeInput = document.getElementById('resume');
+        const photoInput = document.getElementById('photo');
+        const applyForm = document.getElementById('applyForm');
+
+        function validateUpload(input, allowedExtensions, maxSizeMB, label) {
+            const file = input.files[0];
+
+            if (!file) return true;
+
+            const extension = file.name.split('.').pop().toLowerCase();
+
+            if (!allowedExtensions.includes(extension)) {
+                alert(
+                    label + ' Error!\n\nInvalid file format: ' + extension +
+                    '\nAllowed formats: ' + allowedExtensions.join(', ')
+                );
+                input.value = '';
+                input.focus();
+                return false;
+            }
+
+            const maxBytes = maxSizeMB * 1024 * 1024;
+
+            if (file.size > maxBytes) {
+                alert(
+                    label + ' Error!\n\nSelected file size: ' +
+                    (file.size / 1024 / 1024).toFixed(2) + ' MB' +
+                    '\nMaximum allowed size: ' + maxSizeMB + ' MB'
+                );
+                input.value = '';
+                input.focus();
+                return false;
+            }
+
+            return true;
+        }
+
+        resumeInput.addEventListener('change', function () {
+            validateUpload(this, ['pdf', 'doc', 'docx'], 10, 'Resume');
+        });
+
+        photoInput.addEventListener('change', function () {
+            validateUpload(this, ['jpg', 'jpeg', 'png'], 5, 'Photo');
+        });
+
+        applyForm.addEventListener('submit', function (e) {
+            const resumeValid = validateUpload(
+                resumeInput, ['pdf', 'doc', 'docx'], 10, 'Resume'
+            );
+
+            const photoValid = validateUpload(
+                photoInput, ['jpg', 'jpeg', 'png'], 5, 'Photo'
+            );
+
+            if (!resumeValid || !photoValid) {
+                e.preventDefault();
+            }
+        });
+
+
+        <?php if (!empty($error)): ?>
+            alert(<?= json_encode($error) ?>);
+        <?php endif; ?>
+
+        <?php if (!empty($success)): ?>
+            alert(<?= json_encode($success) ?>);
+        <?php endif; ?>
+
     </script>
 </body>
 

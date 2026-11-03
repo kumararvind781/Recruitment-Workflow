@@ -264,67 +264,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'ca
         $drivingLicence = trim($_POST['driving_licence'] ?? '');
 
         // Keep existing files by default
-$photoPath = $candidate['photo_path'] ?? '';
-$resumePath = $candidate['resume_path'] ?? '';
+        $photoPath = $candidate['photo_path'] ?? '';
+        $resumePath = $candidate['resume_path'] ?? '';
 
-/* =========================
-   PHOTO UPLOAD / REPLACE
-   ========================= */
-if (
-    isset($_FILES['photo']) &&
-    $_FILES['photo']['error'] === UPLOAD_ERR_OK &&
-    !empty($_FILES['photo']['tmp_name'])
-) {
-    $photoName = time() . '_' . bin2hex(random_bytes(4)) . '_' .
-        basename($_FILES['photo']['name']);
+        /* =========================
+           PHOTO UPLOAD / REPLACE
+           ========================= */
+        if (
+            isset($_FILES['photo']) &&
+            $_FILES['photo']['error'] === UPLOAD_ERR_OK &&
+            !empty($_FILES['photo']['tmp_name'])
+        ) {
+            $photoName = time() . '_' . bin2hex(random_bytes(4)) . '_' .
+                basename($_FILES['photo']['name']);
 
-    $newPhotoPath = 'uploads/photos/' . $photoName;
-    $newPhotoFile = __DIR__ . '/' . $newPhotoPath;
+            $newPhotoPath = 'uploads/photos/' . $photoName;
+            $newPhotoFile = __DIR__ . '/' . $newPhotoPath;
 
-    if (move_uploaded_file($_FILES['photo']['tmp_name'], $newPhotoFile)) {
+            if (move_uploaded_file($_FILES['photo']['tmp_name'], $newPhotoFile)) {
 
-        // Delete old photo only after new upload succeeds
-        if (!empty($photoPath)) {
-            $oldPhotoFile = __DIR__ . '/' . ltrim($photoPath, '/');
+                // Delete old photo only after new upload succeeds
+                if (!empty($photoPath)) {
+                    $oldPhotoFile = __DIR__ . '/' . ltrim($photoPath, '/');
 
-            if (is_file($oldPhotoFile) && $oldPhotoFile !== $newPhotoFile) {
-                unlink($oldPhotoFile);
+                    if (is_file($oldPhotoFile) && $oldPhotoFile !== $newPhotoFile) {
+                        unlink($oldPhotoFile);
+                    }
+                }
+
+                $photoPath = $newPhotoPath;
             }
         }
+        /* =========================
+           RESUME UPLOAD / REPLACE
+           ========================= */
 
-        $photoPath = $newPhotoPath;
-    }
-}
+        if (isset($_FILES['resume']) && $_FILES['resume']['error'] !== UPLOAD_ERR_NO_FILE) {
 
-/* =========================
-   RESUME UPLOAD / REPLACE
-   ========================= */
-if (
-    isset($_FILES['resume']) &&
-    $_FILES['resume']['error'] === UPLOAD_ERR_OK &&
-    !empty($_FILES['resume']['tmp_name'])
-) {
-    $resumeName = time() . '_' . bin2hex(random_bytes(4)) . '_' .
-        basename($_FILES['resume']['name']);
-
-    $newResumePath = 'uploads/resume/' . $resumeName;
-    $newResumeFile = __DIR__ . '/' . $newResumePath;
-
-    if (move_uploaded_file($_FILES['resume']['tmp_name'], $newResumeFile)) {
-
-        // Delete old resume only after new upload succeeds
-        if (!empty($resumePath)) {
-            $oldResumeFile = __DIR__ . '/' . ltrim($resumePath, '/');
-
-            if (is_file($oldResumeFile) && $oldResumeFile !== $newResumeFile) {
-                unlink($oldResumeFile);
+            if ($_FILES['resume']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception(
+                    'Resume upload failed. Upload error code: ' . $_FILES['resume']['error']
+                );
             }
+
+            $uploadDir = __DIR__ . '/uploads/resumes/';
+
+            // Create folder if it does not exist
+            if (!is_dir($uploadDir)) {
+                if (!mkdir($uploadDir, 0755, true)) {
+                    throw new Exception('Resume upload folder could not be created.');
+                }
+            }
+
+            if (!is_writable($uploadDir)) {
+                throw new Exception('Resume upload folder is not writable.');
+            }
+
+            // Validate file extension
+            $originalName = basename($_FILES['resume']['name']);
+            $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+            $allowedExtensions = ['pdf', 'doc', 'docx'];
+
+            if (!in_array($extension, $allowedExtensions, true)) {
+                throw new Exception('Only PDF, DOC and DOCX files are allowed.');
+            }
+
+            // Generate unique filename
+            $resumeName = time() . '_' . bin2hex(random_bytes(6)) . '.' . $extension;
+
+            $newResumePath = 'uploads/resumes/' . $resumeName;
+            $newResumeFile = $uploadDir . $resumeName;
+
+            // Move uploaded file
+            if (!move_uploaded_file($_FILES['resume']['tmp_name'], $newResumeFile)) {
+                throw new Exception('Unable to save the new resume. Please check folder permissions.');
+            }
+
+            // Update resume path
+            $resumePath = $newResumePath;
         }
-
-        $resumePath = $newResumePath;
-    }
-}
-
         $updateCandidate = $pdo->prepare("
             UPDATE candidates
             SET
@@ -619,7 +638,7 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
 
     return '<input type="' . h($type) . '" name="' . h($name) . '" value="' . h((string) $value) . '">';
 }
- ?>
+?>
 
 <style>
     * {
