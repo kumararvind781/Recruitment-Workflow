@@ -13,7 +13,7 @@ $pdo = Database::connect();
 
 function h($value)
 {
-    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
 function redirect_exam()
@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
         redirect_exam();
     }
 
-    if ((int)$access['is_active'] !== 1) {
+    if ((int) $access['is_active'] !== 1) {
         exam_error('Your exam access has been disabled.');
         redirect_exam();
     }
@@ -127,8 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
     |--------------------------------------------------------------------------
     */
 
-    $_SESSION['exam_access_id'] = (int)$access['id'];
-    $_SESSION['exam_candidate_id'] = (int)$access['candidate_id'];
+    $_SESSION['exam_access_id'] = (int) $access['id'];
+    $_SESSION['exam_candidate_id'] = (int) $access['candidate_id'];
 
     unset(
         $_SESSION['exam_attempt_id'],
@@ -282,7 +282,7 @@ if (
 
     if ($existingAttempt) {
 
-        $_SESSION['exam_attempt_id'] = (int)$existingAttempt['id'];
+        $_SESSION['exam_attempt_id'] = (int) $existingAttempt['id'];
         $_SESSION['exam_application_no'] = $applicationNo;
 
         redirect_exam();
@@ -294,32 +294,79 @@ if (
     |--------------------------------------------------------------------------
     */
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Get 10 Fixed + 10 Random Questions
+    |--------------------------------------------------------------------------
+    */
+
+    // STEP 1: First 10 questions always fixed
     $stmt = $pdo->query("
-        SELECT
-            id,
-            question,
-            option_a,
-            option_b,
-            option_c,
-            option_d,
-            correct_answer,
-            marks
-        FROM exam_questions
-        WHERE exam_type = 'process_associate'
-          AND is_active = 1
-        ORDER BY RAND()
-        LIMIT 20
-    ");
+    SELECT
+        id,
+        question,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
+        correct_answer,
+        marks
+    FROM exam_questions
+    WHERE exam_type = 'process_associate'
+      AND is_active = 1
+    ORDER BY id ASC
+    LIMIT 10
+");
 
-    $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $fixedQuestions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    if (count($questions) < 20) {
-        exam_error(
-            'The Process Associate assessment is not ready yet. Please contact HR.'
-        );
-
+    if (count($fixedQuestions) < 10) {
+        exam_error('Minimum 10 fixed questions required.');
         redirect_exam();
     }
+
+    // STEP 2: Select 10 random questions from remaining pool
+    $fixedIds = array_column($fixedQuestions, 'id');
+
+    $placeholders = implode(',', array_fill(0, count($fixedIds), '?'));
+
+    $stmt = $pdo->prepare("
+    SELECT
+        id,
+        question,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
+        correct_answer,
+        marks
+    FROM exam_questions
+    WHERE exam_type = 'process_associate'
+      AND is_active = 1
+      AND id NOT IN ($placeholders)
+    ORDER BY RAND()
+    LIMIT 10
+");
+
+    $stmt->execute($fixedIds);
+
+    $randomQuestions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (count($randomQuestions) < 10) {
+        exam_error('Minimum 20 active questions required.');
+        redirect_exam();
+    }
+
+    // STEP 3: Combine both sets
+    $questions = array_merge(
+        $fixedQuestions,
+        $randomQuestions
+    );
+
+    // STEP 4: Shuffle all 20 questions
+    shuffle($questions);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -334,7 +381,7 @@ if (
         $totalMarks = 0;
 
         foreach ($questions as $q) {
-            $totalMarks += (float)$q['marks'];
+            $totalMarks += (float) $q['marks'];
         }
 
         $stmt = $pdo->prepare("
@@ -366,7 +413,7 @@ if (
             ':total_marks' => $totalMarks
         ]);
 
-        $attemptId = (int)$pdo->lastInsertId();
+        $attemptId = (int) $pdo->lastInsertId();
 
         /*
         |--------------------------------------------------------------------------
@@ -457,7 +504,7 @@ if (
         redirect_exam();
     }
 
-    $attemptId = (int)($_SESSION['exam_attempt_id'] ?? 0);
+    $attemptId = (int) ($_SESSION['exam_attempt_id'] ?? 0);
 
     if ($attemptId <= 0) {
         exam_error('Exam attempt not found.');
@@ -569,7 +616,7 @@ if (
 
                 $correct++;
 
-                $marks = (float)$answer['marks'];
+                $marks = (float) $answer['marks'];
                 $obtainedMarks += $marks;
 
             } else {
@@ -587,7 +634,7 @@ if (
             ]);
         }
 
-        $totalMarks = (float)$attempt['total_marks'];
+        $totalMarks = (float) $attempt['total_marks'];
 
         $percentage = $totalMarks > 0
             ? round(($obtainedMarks / $totalMarks) * 100, 2)
@@ -631,12 +678,12 @@ if (
         |--------------------------------------------------------------------------
         */
 
-      unset($_SESSION['exam_attempt_id']);
-unset($_SESSION['exam_application_no']);
+        unset($_SESSION['exam_attempt_id']);
+        unset($_SESSION['exam_application_no']);
 
-// Candidate ko result nahi dikhana
-header('Location: https://www.unire.co.in/');
-exit;
+        // Candidate ko result nahi dikhana
+        header('Location: https://www.unire.co.in/');
+        exit;
 
     } catch (Throwable $e) {
 
@@ -690,7 +737,7 @@ if ($examCandidateId) {
 |--------------------------------------------------------------------------
 */
 
-$attemptId = (int)($_SESSION['exam_attempt_id'] ?? 0);
+$attemptId = (int) ($_SESSION['exam_attempt_id'] ?? 0);
 
 $currentAttempt = null;
 
@@ -759,19 +806,16 @@ if ($result) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 
     <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Process Associate Assessment</title>
 
     <style>
-
         * {
             box-sizing: border-box;
         }
@@ -980,383 +1024,317 @@ if ($result) {
                 align-items: flex-start;
             }
         }
-
     </style>
 
 </head>
 
 <body>
 
-<div class="exam-wrapper">
+    <div class="exam-wrapper">
 
-    <div class="exam-card">
+        <div class="exam-card">
 
-        <?php if ($error): ?>
+            <?php if ($error): ?>
 
-            <div class="error">
-                <?= h($error) ?>
-            </div>
-
-        <?php endif; ?>
-
-
-        <!-- =====================================================
-             RESULT
-        ====================================================== -->
-
-        <?php if ($result): ?>
-
-            <div class="result-box">
-
-                <div class="exam-header">
-
-                    <h1>Assessment Submitted</h1>
-
-                    <p>
-                        Your Process Associate assessment has been submitted successfully.
-                    </p>
-
-                </div>
-
-                <div class="score">
-                    <?= h($result['percentage']) ?>%
-                </div>
-
-                <div class="result-grid">
-
-                    <div class="result-item">
-                        <strong><?= h($result['total_marks']) ?></strong>
-                        Total Marks
-                    </div>
-
-                    <div class="result-item">
-                        <strong><?= h($result['obtained_marks']) ?></strong>
-                        Obtained
-                    </div>
-
-                    <div class="result-item">
-                        <strong><?= h($result['correct']) ?></strong>
-                        Correct
-                    </div>
-
-                    <div class="result-item">
-                        <strong><?= h($result['wrong']) ?></strong>
-                        Wrong
-                    </div>
-
-                </div>
-
-                <p>
-                    Attempted:
-                    <strong><?= h($result['attempted']) ?></strong>
-                    &nbsp; | &nbsp;
-                    Unattempted:
-                    <strong><?= h($result['unattempted']) ?></strong>
-                </p>
-
-                <p style="margin-top:30px;color:#777;">
-                    Thank you for completing the assessment.
-                </p>
-
-            </div>
-
-
-        <!-- =====================================================
-             STEP 1 - LOGIN
-        ====================================================== -->
-
-        <?php elseif (!$examCandidateId): ?>
-
-            <div class="exam-header">
-
-                <h1>Process Associate Assessment</h1>
-
-                <p>
-                    Please login using the credentials provided by HR.
-                </p>
-
-            </div>
-
-            <form method="POST">
-
-                <input
-                    type="hidden"
-                    name="csrf"
-                    value="<?= h($csrf) ?>"
-                >
-
-                <input
-                    type="hidden"
-                    name="action"
-                    value="login"
-                >
-
-                <label>
-                    Username
-                </label>
-
-                <input
-                    type="text"
-                    name="username"
-                    autocomplete="username"
-                    required
-                >
-
-                <label>
-                    Password
-                </label>
-
-                <input
-                    type="password"
-                    name="password"
-                    autocomplete="current-password"
-                    required
-                >
-
-                <button
-                    type="submit"
-                    class="btn"
-                >
-                    Login
-                </button>
-
-            </form>
-
-
-        <!-- =====================================================
-             STEP 2 - APPLICATION ID
-        ====================================================== -->
-
-        <?php elseif (!$currentAttempt): ?>
-
-            <div class="exam-header">
-
-                <h1>Application Verification</h1>
-
-                <p>
-                    Enter your Application ID to continue.
-                </p>
-
-            </div>
-
-            <div class="info">
-
-                Example:
-
-                <strong>APP202609030005</strong>
-
-            </div>
-
-            <form method="POST">
-
-                <input
-                    type="hidden"
-                    name="csrf"
-                    value="<?= h($csrf) ?>"
-                >
-
-                <input
-                    type="hidden"
-                    name="action"
-                    value="verify_application"
-                >
-
-                <label>
-                    Application ID
-                </label>
-
-                <input
-                    type="text"
-                    name="application_no"
-                    placeholder="Enter Application ID"
-                    required
-                >
-
-                <button
-                    type="submit"
-                    class="btn"
-                >
-                    Continue
-                </button>
-
-            </form>
-
-
-        <!-- =====================================================
-             STEP 3 - EXAM
-        ====================================================== -->
-
-        <?php else: ?>
-
-            <div class="top-bar">
-
-                <div>
-                    <strong>
-                        Process Associate Assessment
-                    </strong>
-                </div>
-
-                <a href="?logout=1">
-                    Exit
-                </a>
-
-            </div>
-
-            <?php if ($candidate): ?>
-
-                <div class="candidate-info">
-
-                    <div>
-                        <strong>Candidate:</strong>
-                        <?= h($candidate['full_name']) ?>
-                    </div>
-
-                    <div style="margin-top:6px;">
-                        <strong>Application ID:</strong>
-                        <?= h($candidate['application_no']) ?>
-                    </div>
-
-                    <div style="margin-top:6px;">
-                        <strong>Position:</strong>
-                        <?= h($candidate['position_applied']) ?>
-                    </div>
-
+                <div class="error">
+                    <?= h($error) ?>
                 </div>
 
             <?php endif; ?>
 
 
-            <div class="info">
+            <!-- =====================================================
+             RESULT
+        ====================================================== -->
 
-                <strong>Instructions</strong>
+            <?php if ($result): ?>
 
-                <ul style="margin-bottom:0;">
+                <div class="result-box">
 
-                    <li>
-                        There are <?= count($currentQuestions) ?> questions.
-                    </li>
+                    <div class="exam-header">
 
-                    <li>
-                        Select one answer for each question.
-                    </li>
+                        <h1>Assessment Submitted</h1>
 
-                    <li>
-                        Once submitted, the assessment cannot be attempted again.
-                    </li>
-
-                </ul>
-
-            </div>
-
-
-            <form
-                method="POST"
-                onsubmit="return confirm('Are you sure you want to submit the assessment? You cannot change your answers after submission.');"
-            >
-
-                <input
-                    type="hidden"
-                    name="csrf"
-                    value="<?= h($csrf) ?>"
-                >
-
-                <input
-                    type="hidden"
-                    name="action"
-                    value="submit_exam"
-                >
-
-
-                <?php foreach ($currentQuestions as $q): ?>
-
-                    <div class="question">
-
-                        <div class="question-title">
-
-                            Q<?= (int)$q['question_order'] ?>.
-                            <?= h($q['question']) ?>
-
-                        </div>
-
-
-                        <label class="option">
-
-                            <input
-                                type="radio"
-                                name="answer[<?= (int)$q['question_id'] ?>]"
-                                value="A"
-                            >
-
-                            A.
-                            <?= h($q['option_a']) ?>
-
-                        </label>
-
-
-                        <label class="option">
-
-                            <input
-                                type="radio"
-                                name="answer[<?= (int)$q['question_id'] ?>]"
-                                value="B"
-                            >
-
-                            B.
-                            <?= h($q['option_b']) ?>
-
-                        </label>
-
-
-                        <label class="option">
-
-                            <input
-                                type="radio"
-                                name="answer[<?= (int)$q['question_id'] ?>]"
-                                value="C"
-                            >
-
-                            C.
-                            <?= h($q['option_c']) ?>
-
-                        </label>
-
-
-                        <label class="option">
-
-                            <input
-                                type="radio"
-                                name="answer[<?= (int)$q['question_id'] ?>]"
-                                value="D"
-                            >
-
-                            D.
-                            <?= h($q['option_d']) ?>
-
-                        </label>
+                        <p>
+                            Your Process Associate assessment has been submitted successfully.
+                        </p>
 
                     </div>
 
-                <?php endforeach; ?>
+                    <div class="score">
+                        <?= h($result['percentage']) ?>%
+                    </div>
 
+                    <div class="result-grid">
 
-                <div class="submit-area">
+                        <div class="result-item">
+                            <strong><?= h($result['total_marks']) ?></strong>
+                            Total Marks
+                        </div>
 
-                    <button
-                        type="submit"
-                        class="btn btn-danger"
-                    >
-                        Submit Assessment
-                    </button>
+                        <div class="result-item">
+                            <strong><?= h($result['obtained_marks']) ?></strong>
+                            Obtained
+                        </div>
+
+                        <div class="result-item">
+                            <strong><?= h($result['correct']) ?></strong>
+                            Correct
+                        </div>
+
+                        <div class="result-item">
+                            <strong><?= h($result['wrong']) ?></strong>
+                            Wrong
+                        </div>
+
+                    </div>
+
+                    <p>
+                        Attempted:
+                        <strong><?= h($result['attempted']) ?></strong>
+                        &nbsp; | &nbsp;
+                        Unattempted:
+                        <strong><?= h($result['unattempted']) ?></strong>
+                    </p>
+
+                    <p style="margin-top:30px;color:#777;">
+                        Thank you for completing the assessment.
+                    </p>
 
                 </div>
 
-            </form>
 
-        <?php endif; ?>
+                <!-- =====================================================
+             STEP 1 - LOGIN
+        ====================================================== -->
+
+            <?php elseif (!$examCandidateId): ?>
+
+                <div class="exam-header">
+
+                    <h1>Process Associate Assessment</h1>
+
+                    <p>
+                        Please login using the credentials provided by HR.
+                    </p>
+
+                </div>
+
+                <form method="POST">
+
+                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+
+                    <input type="hidden" name="action" value="login">
+
+                    <label>
+                        Username
+                    </label>
+
+                    <input type="text" name="username" autocomplete="username" required>
+
+                    <label>
+                        Password
+                    </label>
+
+                    <input type="password" name="password" autocomplete="current-password" required>
+
+                    <button type="submit" class="btn">
+                        Login
+                    </button>
+
+                </form>
+
+
+                <!-- =====================================================
+             STEP 2 - APPLICATION ID
+        ====================================================== -->
+
+            <?php elseif (!$currentAttempt): ?>
+
+                <div class="exam-header">
+
+                    <h1>Application Verification</h1>
+
+                    <p>
+                        Enter your Application ID to continue.
+                    </p>
+
+                </div>
+
+                <div class="info">
+
+                    Example:
+
+                    <strong>APP202609030005</strong>
+
+                </div>
+
+                <form method="POST">
+
+                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+
+                    <input type="hidden" name="action" value="verify_application">
+
+                    <label>
+                        Application ID
+                    </label>
+
+                    <input type="text" name="application_no" placeholder="Enter Application ID" required>
+
+                    <button type="submit" class="btn">
+                        Continue
+                    </button>
+
+                </form>
+
+
+                <!-- =====================================================
+             STEP 3 - EXAM
+        ====================================================== -->
+
+            <?php else: ?>
+
+                <div class="top-bar">
+
+                    <div>
+                        <strong>
+                            Process Associate Assessment
+                        </strong>
+                    </div>
+
+                    <a href="?logout=1">
+                        Exit
+                    </a>
+
+                </div>
+
+                <?php if ($candidate): ?>
+
+                    <div class="candidate-info">
+
+                        <div>
+                            <strong>Candidate:</strong>
+                            <?= h($candidate['full_name']) ?>
+                        </div>
+
+                        <div style="margin-top:6px;">
+                            <strong>Application ID:</strong>
+                            <?= h($candidate['application_no']) ?>
+                        </div>
+
+                        <div style="margin-top:6px;">
+                            <strong>Position:</strong>
+                            <?= h($candidate['position_applied']) ?>
+                        </div>
+
+                    </div>
+
+                <?php endif; ?>
+
+
+                <div class="info">
+
+                    <strong>Instructions</strong>
+
+                    <ul style="margin-bottom:0;">
+
+                        <li>
+                            There are <?= count($currentQuestions) ?> questions.
+                        </li>
+
+                        <li>
+                            Select one answer for each question.
+                        </li>
+
+                        <li>
+                            Once submitted, the assessment cannot be attempted again.
+                        </li>
+
+                    </ul>
+
+                </div>
+
+
+                <form method="POST"
+                    onsubmit="return confirm('Are you sure you want to submit the assessment? You cannot change your answers after submission.');">
+
+                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+
+                    <input type="hidden" name="action" value="submit_exam">
+
+
+                    <?php foreach ($currentQuestions as $q): ?>
+
+                        <div class="question">
+
+                            <div class="question-title">
+
+                                Q<?= (int) $q['question_order'] ?>.
+                                <?= h($q['question']) ?>
+
+                            </div>
+
+
+                            <label class="option">
+
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="A">
+
+                                A.
+                                <?= h($q['option_a']) ?>
+
+                            </label>
+
+
+                            <label class="option">
+
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="B">
+
+                                B.
+                                <?= h($q['option_b']) ?>
+
+                            </label>
+
+
+                            <label class="option">
+
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="C">
+
+                                C.
+                                <?= h($q['option_c']) ?>
+
+                            </label>
+
+
+                            <label class="option">
+
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="D">
+
+                                D.
+                                <?= h($q['option_d']) ?>
+
+                            </label>
+
+                        </div>
+
+                    <?php endforeach; ?>
+
+
+                    <div class="submit-area">
+
+                        <button type="submit" class="btn btn-danger">
+                            Submit Assessment
+                        </button>
+
+                    </div>
+
+                </form>
+
+            <?php endif; ?>
+
+        </div>
 
     </div>
 
-</div>
-
 </body>
+
 </html>

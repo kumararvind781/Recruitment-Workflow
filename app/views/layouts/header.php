@@ -143,13 +143,15 @@ $sessionExpires = $lastActivity + $sessionTimeout;
         <a class="btn btn-outline" href="dashboard.php">
           Dashboard
         </a>
-
+        <a class="btn btn-outline" href="exam_paper_management.php">Exam</a>
 
         <?php if (($user['role'] ?? '') === 'admin'): ?>
 
           <a class="btn btn-outline" href="users.php">
             Users
           </a>
+
+          <a class="btn btn-outline" href="exam_paper_management.php">Exam</a>
 
           <a class="btn btn-outline" href="reports.php">
             Reports
