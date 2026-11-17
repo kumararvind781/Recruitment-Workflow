@@ -74,7 +74,11 @@ if (strcasecmp(trim($candidate['position_applied']), 'Process Associate') === 0)
             percentage,
             status,
             started_at,
-            submitted_at
+            submitted_at,
+            duration_seconds,
+            duration_seconds,
+            submission_reason,
+            violation_count
         FROM exam_attempts
         WHERE candidate_id = ?
           AND exam_type = 'process_associate'
@@ -1152,6 +1156,64 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
     .acc-body {
         padding-left: 20px;
     }
+
+    .exam-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.exam-detail-item {
+    background: #fcfafc;
+    border: 1px solid #eadfeb;
+    border-radius: 12px;
+    padding: 14px 16px;
+    min-width: 0;
+}
+
+.exam-detail-item .exam-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #887a97;
+    text-transform: uppercase;
+    margin-bottom: 7px;
+}
+
+.exam-detail-item .exam-value {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+    color: #30263c;
+    overflow-wrap: anywhere;
+}
+
+.exam-detail-item.reason {
+    grid-column: span 2;
+}
+
+.exam-detail-item.reason .exam-value {
+    color: #b52b80;
+}
+
+.exam-detail-item.status .exam-value {
+    color: #16834a;
+}
+
+.exam-detail-actions {
+    margin-top: 20px;
+}
+
+@media(max-width: 650px) {
+    .exam-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .exam-detail-item.reason {
+        grid-column: span 1;
+    }
+}
 </style>
 
 <div class="container">
@@ -1724,10 +1786,10 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                 </div>
             </details>
 
+
             <?php if (strcasecmp(trim($candidate['position_applied']), 'Process Associate') === 0): ?>
 
                 <details class="acc-item">
-
                     <summary>Exam Details</summary>
 
                     <div class="acc-body">
@@ -1738,61 +1800,126 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
 
                         <?php else: ?>
 
-                            <div style="display:grid; grid-template-columns:180px 1fr; gap:10px 20px; max-width:600px;">
+                            <?php
+                            $duration = isset($examAttempt['duration_seconds'])
+                                && $examAttempt['duration_seconds'] !== null
+                                ? gmdate('H:i:s', (int) $examAttempt['duration_seconds'])
+                                : 'Not recorded';
 
-                                <strong>Status:</strong>
-                                <span>
-                                    <?= h(ucfirst($examAttempt['status'])) ?>
-                                </span>
+                            $reason = $examAttempt['submission_reason'] ?? '';
 
-                                <strong>Total Questions:</strong>
-                                <span>
-                                    <?= (int) $examAttempt['total_questions'] ?>
-                                </span>
+                            if ($reason === 'tab_switch_limit') {
+                                $reasonLabel = 'Automatic Submission (2nd Tab Switch)';
+                            } elseif ($reason === 'manual') {
+                                $reasonLabel = 'Manual Submission';
+                            } else {
+                                $reasonLabel = 'Not recorded';
+                            }
+                            ?>
 
-                                <strong>Attempted:</strong>
-                                <span>
-                                    <?= (int) $examAttempt['attempted_questions'] ?>
-                                </span>
+                            <div class="exam-detail-grid">
 
-                                <strong>Correct:</strong>
-                                <span>
-                                    <?= (int) $examAttempt['correct_answers'] ?>
-                                </span>
+                                <div class="exam-detail-item status">
+                                    <span class="exam-label">Exam Status</span>
+                                    <span class="exam-value">
+                                        <?= h(ucfirst($examAttempt['status'])) ?>
+                                    </span>
+                                </div>
 
-                                <strong>Wrong:</strong>
-                                <span>
-                                    <?= (int) $examAttempt['wrong_answers'] ?>
-                                </span>
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Time Taken</span>
+                                    <span class="exam-value">
+                                        <?= h($duration) ?>
+                                    </span>
+                                </div>
 
-                                <strong>Unattempted:</strong>
-                                <span>
-                                    <?= (int) $examAttempt['unattempted_questions'] ?>
-                                </span>
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Total Questions</span>
+                                    <span class="exam-value">
+                                        <?= (int) $examAttempt['total_questions'] ?>
+                                    </span>
+                                </div>
 
-                                <strong>Marks:</strong>
-                                <span>
-                                    <?= h($examAttempt['obtained_marks']) ?>
-                                    /
-                                    <?= h($examAttempt['total_marks']) ?>
-                                </span>
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Attempted</span>
+                                    <span class="exam-value">
+                                        <?= (int) $examAttempt['attempted_questions'] ?>
+                                    </span>
+                                </div>
 
-                                <strong>Percentage:</strong>
-                                <span>
-                                    <?= h($examAttempt['percentage']) ?>%
-                                </span>
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Correct Answers</span>
+                                    <span class="exam-value">
+                                        <?= (int) $examAttempt['correct_answers'] ?>
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Wrong Answers</span>
+                                    <span class="exam-value">
+                                        <?= (int) $examAttempt['wrong_answers'] ?>
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Unattempted</span>
+                                    <span class="exam-value">
+                                        <?= (int) $examAttempt['unattempted_questions'] ?>
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Percentage</span>
+                                    <span class="exam-value">
+                                        <?= h($examAttempt['percentage']) ?>%
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Obtained Marks</span>
+                                    <span class="exam-value">
+                                        <?= h($examAttempt['obtained_marks']) ?> /
+                                        <?= h($examAttempt['total_marks']) ?>
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Tab Switch Violations</span>
+                                    <span class="exam-value">
+                                        <?= (int) ($examAttempt['violation_count'] ?? 0) ?> / 2
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item reason">
+                                    <span class="exam-label">Submission Reason</span>
+                                    <span class="exam-value">
+                                        <?= h($reasonLabel) ?>
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Started At</span>
+                                    <span class="exam-value">
+                                        <?= h($examAttempt['started_at'] ?? '-') ?>
+                                    </span>
+                                </div>
+
+                                <div class="exam-detail-item">
+                                    <span class="exam-label">Submitted At</span>
+                                    <span class="exam-value">
+                                        <?= h($examAttempt['submitted_at'] ?? '-') ?>
+                                    </span>
+                                </div>
 
                             </div>
 
                             <?php if ($examAttempt['status'] === 'completed'): ?>
 
                                 <div style="margin-top:20px;">
-
                                     <a href="unire_exam_paper.php?attempt_id=<?= (int) $examAttempt['id'] ?>" target="_blank"
                                         class="btn">
                                         Full Paper PDF
                                     </a>
-
                                 </div>
 
                             <?php endif; ?>
@@ -1800,7 +1927,6 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
                         <?php endif; ?>
 
                     </div>
-
                 </details>
 
             <?php endif; ?>

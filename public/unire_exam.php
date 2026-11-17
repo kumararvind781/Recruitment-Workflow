@@ -1,4 +1,14 @@
 <?php
+/*
+|--------------------------------------------------------------------------
+| FILE: unire_exam.php
+| PURPOSE: Candidate login, application verification and Process Associate exam.
+| CHANGES: Autosave answers, restore saved answers after reconnect, record
+|          elapsed duration, and apply desktop tab-switch warning/submission.
+| NOTE: Existing page flow, form field names and existing markup are retained.
+|--------------------------------------------------------------------------
+*/
+
 session_start();
 
 require_once __DIR__ . '/../app/config/database.php';
@@ -34,6 +44,14 @@ function get_exam_error()
     return $error;
 }
 
+function exam_json_response(array $data, int $status = 200): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data);
+    exit;
+}
+
 /*
 |--------------------------------------------------------------------------
 | CSRF
@@ -45,6 +63,83 @@ if (empty($_SESSION['exam_csrf'])) {
 }
 
 $csrf = $_SESSION['exam_csrf'];
+
+
+/* AJAX: Save a selected answer immediately. */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_answer') {
+    $candidateId = (int)($_SESSION['exam_candidate_id'] ?? 0);
+    $activeAttemptId = (int)($_SESSION['exam_attempt_id'] ?? 0);
+
+    if (!$candidateId || !$activeAttemptId) {
+        exam_json_response(['ok' => false, 'message' => 'Exam session not found.'], 401);
+    }
+    if (!hash_equals($csrf, $_POST['csrf'] ?? '')) {
+        exam_json_response(['ok' => false, 'message' => 'Invalid request.'], 403);
+    }
+
+    $questionId = (int)($_POST['question_id'] ?? 0);
+    $answerValue = $_POST['answer'] ?? '';
+    if ($questionId <= 0 || !in_array($answerValue, ['A', 'B', 'C', 'D'], true)) {
+        exam_json_response(['ok' => false, 'message' => 'Invalid answer.'], 422);
+    }
+
+    $save = $pdo->prepare("
+        UPDATE exam_answers ea
+        INNER JOIN exam_attempts at ON at.id = ea.attempt_id
+        SET ea.candidate_answer = :answer,
+            ea.answered_at = NOW()
+        WHERE ea.attempt_id = :attempt_id
+          AND ea.question_id = :question_id
+          AND at.candidate_id = :candidate_id
+          AND at.status = 'started'
+    ");
+    $save->execute([
+        ':answer' => $answerValue,
+        ':attempt_id' => $activeAttemptId,
+        ':question_id' => $questionId,
+        ':candidate_id' => $candidateId
+    ]);
+    exam_json_response(['ok' => $save->rowCount() >= 0]);
+}
+
+/* AJAX: Count confirmed desktop tab switches. */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'record_violation') {
+    $candidateId = (int)($_SESSION['exam_candidate_id'] ?? 0);
+    $activeAttemptId = (int)($_SESSION['exam_attempt_id'] ?? 0);
+
+    if (!$candidateId || !$activeAttemptId) {
+        exam_json_response(['ok' => false, 'message' => 'Exam session not found.'], 401);
+    }
+    if (!hash_equals($csrf, $_POST['csrf'] ?? '')) {
+        exam_json_response(['ok' => false, 'message' => 'Invalid request.'], 403);
+    }
+
+    $update = $pdo->prepare("
+        UPDATE exam_attempts
+        SET violation_count = COALESCE(violation_count, 0) + 1
+        WHERE id = :attempt_id
+          AND candidate_id = :candidate_id
+          AND status = 'started'
+    ");
+    $update->execute([
+        ':attempt_id' => $activeAttemptId,
+        ':candidate_id' => $candidateId
+    ]);
+
+    if ($update->rowCount() !== 1) {
+        exam_json_response(['ok' => false, 'message' => 'Exam is no longer active.'], 409);
+    }
+
+    $countStmt = $pdo->prepare("SELECT violation_count FROM exam_attempts WHERE id = ? AND candidate_id = ? LIMIT 1");
+    $countStmt->execute([$activeAttemptId, $candidateId]);
+    $count = (int)$countStmt->fetchColumn();
+
+    exam_json_response([
+        'ok' => true,
+        'violation_count' => $count,
+        'submit_required' => ($count >= 2)
+    ]);
+}
 
 
 /*
@@ -550,6 +645,7 @@ if (
             ea.question_id,
             ea.question_order,
             ea.correct_answer,
+            ea.candidate_answer,
             eq.marks
         FROM exam_answers ea
         INNER JOIN exam_questions eq
@@ -592,7 +688,7 @@ if (
 
         foreach ($answers as $answer) {
 
-            $questionAnswer = $_POST['answer'][$answer['question_id']] ?? null;
+            $questionAnswer = $_POST['answer'][$answer['question_id']] ?? ($answer['candidate_answer'] ?? null);
 
             if (!in_array($questionAnswer, ['A', 'B', 'C', 'D'], true)) {
 
@@ -655,6 +751,8 @@ if (
                 unattempted_questions = :unattempted,
                 obtained_marks = :obtained_marks,
                 percentage = :percentage,
+                duration_seconds = GREATEST(0, TIMESTAMPDIFF(SECOND, started_at, NOW())),
+                submission_reason = :submission_reason,
                 status = 'completed',
                 submitted_at = NOW()
             WHERE id = :attempt_id
@@ -667,6 +765,9 @@ if (
             ':unattempted' => $unattempted,
             ':obtained_marks' => $obtainedMarks,
             ':percentage' => $percentage,
+            ':submission_reason' => in_array(($_POST['submission_reason'] ?? 'manual'), ['manual', 'tab_switch_limit'], true)
+                ? ($_POST['submission_reason'] ?? 'manual')
+                : 'manual',
             ':attempt_id' => $attemptId
         ]);
 
@@ -760,6 +861,17 @@ if ($attemptId > 0) {
     $currentAttempt = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
+$elapsedSeconds = 0;
+if ($currentAttempt) {
+    $elapsedStmt = $pdo->prepare("
+        SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, started_at, NOW()))
+        FROM exam_attempts
+        WHERE id = ? AND candidate_id = ?
+    ");
+    $elapsedStmt->execute([$attemptId, $examCandidateId]);
+    $elapsedSeconds = (int)$elapsedStmt->fetchColumn();
+}
+
 
 /*
 |--------------------------------------------------------------------------
@@ -776,6 +888,7 @@ if ($currentAttempt) {
             ea.id AS answer_id,
             ea.question_id,
             ea.question_order,
+            ea.candidate_answer,
             eq.question,
             eq.option_a,
             eq.option_b,
@@ -964,6 +1077,71 @@ if ($result) {
             margin-top: 30px;
             padding-top: 25px;
             border-top: 1px solid #eee;
+        }
+
+        .exam-status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: #f7f0f7;
+            border: 1px solid #eadbea;
+            border-radius: 12px;
+            padding: 13px 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .elapsed-time { font-weight: 700; color: #8f236e; font-variant-numeric: tabular-nums; }
+        .save-status { color: #39734b; font-size: 13px; }
+        .warning-banner {
+            display: none;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            border-radius: 10px;
+            background: #fff4dc;
+            border: 1px solid #f0d28a;
+            color: #795400;
+            font-weight: 600;
+        }
+        .exam-warning-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(25, 18, 32, .68);
+        }
+        .exam-warning-modal.show { display: flex; }
+        .exam-warning-card {
+            width: 100%;
+            max-width: 440px;
+            padding: 28px;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 18px 60px rgba(0,0,0,.25);
+            text-align: center;
+        }
+        .exam-warning-card h3 {
+            margin: 0 0 12px;
+            color: #a9257c;
+            font-size: 22px;
+        }
+        .exam-warning-card p {
+            margin: 0 0 22px;
+            color: #44384d;
+            line-height: 1.6;
+        }
+        .exam-warning-card .btn { min-width: 130px; }
+        .offline-banner {
+            display: none;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            border-radius: 10px;
+            background: #fff0f0;
+            color: #9a2525;
         }
 
         .result-box {
@@ -1232,6 +1410,20 @@ if ($result) {
                 <?php endif; ?>
 
 
+                <div class="exam-status-bar">
+                    <div>Time taken: <span class="elapsed-time" id="elapsedTimer">00:00:00</span></div>
+                    <div class="save-status" id="saveStatus" aria-live="polite">Answers save automatically</div>
+                </div>
+                <div class="warning-banner" id="tabWarning" role="alert"></div>
+                <div class="exam-warning-modal" id="tabWarningModal" role="alertdialog" aria-modal="true" aria-labelledby="tabWarningTitle" aria-describedby="tabWarningMessage">
+                    <div class="exam-warning-card">
+                        <h3 id="tabWarningTitle">Assessment Warning</h3>
+                        <p id="tabWarningMessage">You switched away from the assessment. This is your first warning. One more tab switch will automatically submit your assessment.</p>
+                        <button type="button" class="btn" id="tabWarningAcknowledge">I Understand</button>
+                    </div>
+                </div>
+                <div class="offline-banner" id="offlineBanner">You are offline. Your latest selections will be queued and synced when internet returns.</div>
+
                 <div class="info">
 
                     <strong>Instructions</strong>
@@ -1255,12 +1447,12 @@ if ($result) {
                 </div>
 
 
-                <form method="POST"
-                    onsubmit="return confirm('Are you sure you want to submit the assessment? You cannot change your answers after submission.');">
+                <form method="POST" id="examForm"
+                    onsubmit="if (document.getElementById('submissionReason').value !== 'manual') return true; return confirm('Are you sure you want to submit the assessment? You cannot change your answers after submission.');">
 
                     <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-
                     <input type="hidden" name="action" value="submit_exam">
+                    <input type="hidden" name="submission_reason" id="submissionReason" value="manual">
 
 
                     <?php foreach ($currentQuestions as $q): ?>
@@ -1277,7 +1469,7 @@ if ($result) {
 
                             <label class="option">
 
-                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="A">
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="A" <?= (($q['candidate_answer'] ?? '') === 'A') ? 'checked' : '' ?>>
 
                                 A.
                                 <?= h($q['option_a']) ?>
@@ -1287,7 +1479,7 @@ if ($result) {
 
                             <label class="option">
 
-                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="B">
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="B" <?= (($q['candidate_answer'] ?? '') === 'B') ? 'checked' : '' ?>>
 
                                 B.
                                 <?= h($q['option_b']) ?>
@@ -1297,7 +1489,7 @@ if ($result) {
 
                             <label class="option">
 
-                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="C">
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="C" <?= (($q['candidate_answer'] ?? '') === 'C') ? 'checked' : '' ?>>
 
                                 C.
                                 <?= h($q['option_c']) ?>
@@ -1307,7 +1499,7 @@ if ($result) {
 
                             <label class="option">
 
-                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="D">
+                                <input type="radio" name="answer[<?= (int) $q['question_id'] ?>]" value="D" <?= (($q['candidate_answer'] ?? '') === 'D') ? 'checked' : '' ?>>
 
                                 D.
                                 <?= h($q['option_d']) ?>
@@ -1334,6 +1526,202 @@ if ($result) {
         </div>
 
     </div>
+
+<?php if ($currentAttempt): ?>
+<script>
+(() => {
+    const csrf = <?= json_encode($csrf) ?>;
+    const attemptId = <?= (int)$attemptId ?>;
+    let elapsed = <?= (int)$elapsedSeconds ?>;
+    const timerEl = document.getElementById('elapsedTimer');
+    const saveStatus = document.getElementById('saveStatus');
+    const warningBox = document.getElementById('tabWarning');
+    const warningModal = document.getElementById('tabWarningModal');
+    const warningMessage = document.getElementById('tabWarningMessage');
+    const warningAcknowledge = document.getElementById('tabWarningAcknowledge');
+    const offlineBanner = document.getElementById('offlineBanner');
+    const examForm = document.getElementById('examForm');
+    const reasonInput = document.getElementById('submissionReason');
+    const queueKey = 'unire_exam_pending_' + attemptId;
+    let violationRequestPending = false;
+    let pendingFirstWarning = false;
+    let autoSubmitScheduled = false;
+
+    function showTabWarning(message, isFinal = false) {
+        warningMessage.textContent = message;
+        warningAcknowledge.style.display = isFinal ? 'none' : 'inline-block';
+        warningModal.classList.add('show');
+        warningAcknowledge.focus();
+    }
+
+    warningAcknowledge.addEventListener('click', () => {
+        warningModal.classList.remove('show');
+    });
+
+    function formatTime(total) {
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+    }
+    timerEl.textContent = formatTime(elapsed);
+    setInterval(() => {
+        elapsed++;
+        timerEl.textContent = formatTime(elapsed);
+    }, 1000);
+
+    function getQueue() {
+        try { return JSON.parse(localStorage.getItem(queueKey) || '{}'); }
+        catch (_) { return {}; }
+    }
+    function setQueue(queue) {
+        try { localStorage.setItem(queueKey, JSON.stringify(queue)); } catch (_) {}
+    }
+
+    // Restore answers that were selected while the device was offline.
+    const pendingAtLoad = getQueue();
+    document.querySelectorAll('#examForm input[type="radio"]').forEach(radio => {
+        const match = radio.name.match(/^answer\[(\d+)\]$/);
+        if (match && pendingAtLoad[match[1]]) {
+            radio.checked = (radio.value === pendingAtLoad[match[1]]);
+        }
+    });
+
+    async function saveAnswer(questionId, answer) {
+        const queue = getQueue();
+        queue[questionId] = answer;
+        setQueue(queue);
+
+        if (!navigator.onLine) {
+            saveStatus.textContent = 'Answer queued; waiting for internet';
+            return;
+        }
+
+        const data = new FormData();
+        data.append('action', 'save_answer');
+        data.append('csrf', csrf);
+        data.append('question_id', questionId);
+        data.append('answer', answer);
+
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST', body: data, credentials: 'same-origin'
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'Save failed');
+
+            const latest = getQueue();
+            if (latest[questionId] === answer) {
+                delete latest[questionId];
+                setQueue(latest);
+            }
+            saveStatus.textContent = 'All answers saved';
+        } catch (_) {
+            saveStatus.textContent = 'Answer queued; will sync when connection returns';
+        }
+    }
+
+    document.querySelectorAll('#examForm input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const match = radio.name.match(/^answer\[(\d+)\]$/);
+            if (match) saveAnswer(match[1], radio.value);
+        });
+    });
+
+    async function syncQueuedAnswers() {
+        const queue = getQueue();
+        for (const [questionId, answer] of Object.entries(queue)) {
+            await saveAnswer(questionId, answer);
+        }
+    }
+
+    // Before any normal form submission, try to sync answers still queued locally.
+    // The existing confirmation dialog and form field names remain unchanged.
+    examForm.addEventListener('submit', async function (event) {
+        if (examForm.dataset.syncing === '1') return;
+        event.preventDefault();
+        examForm.dataset.syncing = '1';
+        try {
+            await syncQueuedAnswers();
+        } finally {
+            HTMLFormElement.prototype.submit.call(examForm);
+        }
+    });
+
+    function updateNetworkStatus() {
+        offlineBanner.style.display = navigator.onLine ? 'none' : 'block';
+        if (navigator.onLine) syncQueuedAnswers();
+    }
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    updateNetworkStatus();
+
+    // Mobile browsers fire visibilitychange for both app switching and phone locking.
+    // Keep mobile excluded to avoid treating a phone lock/screen timeout as a violation.
+    // On supported desktop browsers, show the first warning as a blocking popup
+    // when the candidate returns to the exam tab. The second violation auto-submits.
+    const isDesktop = window.matchMedia('(pointer: fine)').matches && window.innerWidth >= 900;
+    if (isDesktop) {
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible' && pendingFirstWarning) {
+                pendingFirstWarning = false;
+                showTabWarning(
+                    'Warning 1 of 2: You switched away from the assessment. If you switch tabs or windows one more time, your assessment will be submitted automatically.'
+                );
+                return;
+            }
+
+            if (document.visibilityState !== 'hidden' || violationRequestPending || autoSubmitScheduled) return;
+            violationRequestPending = true;
+
+            const data = new FormData();
+            data.append('action', 'record_violation');
+            data.append('csrf', csrf);
+
+            try {
+                const response = await fetch(window.location.href, {
+                    method: 'POST', body: data, credentials: 'same-origin'
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'Could not record violation');
+
+                if (result.violation_count === 1) {
+                    pendingFirstWarning = true;
+                    // If the candidate returned before the server response arrived, show it now.
+                    if (document.visibilityState === 'visible') {
+                        pendingFirstWarning = false;
+                        showTabWarning(
+                            'Warning 1 of 2: You switched away from the assessment. If you switch tabs or windows one more time, your assessment will be submitted automatically.'
+                        );
+                    }
+                } else if (result.submit_required) {
+                    autoSubmitScheduled = true;
+                    reasonInput.value = 'tab_switch_limit';
+                    warningBox.textContent = 'Second tab-switch violation detected. Your assessment is being submitted automatically.';
+                    warningBox.style.display = 'block';
+
+                    // Display a final popup if the candidate is already back on the exam tab.
+                    if (document.visibilityState === 'visible') {
+                        showTabWarning(
+                            'Second tab-switch violation detected. Your assessment is now being submitted automatically.',
+                            true
+                        );
+                    }
+
+                    await syncQueuedAnswers();
+                    // Brief delay lets the final popup be seen if the tab is visible.
+                    window.setTimeout(() => HTMLFormElement.prototype.submit.call(examForm), 1200);
+                }
+            } catch (_) {
+                // A violation is counted only after the server confirms it.
+            } finally {
+                violationRequestPending = false;
+            }
+        });
+    }
+})();
+</script>
+<?php endif; ?>
 
 </body>
 

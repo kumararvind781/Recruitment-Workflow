@@ -1,4 +1,14 @@
 <?php
+/*
+|--------------------------------------------------------------------------
+| FILE: unire_exam_paper.php
+| PURPOSE: Admin/recruiter report for a completed Process Associate exam.
+| CHANGES: Displays candidate answers, result summary, elapsed duration,
+|          tab-switch violation count and submission reason.
+| NOTE: Existing attempt_id parameter and report page structure are retained.
+|--------------------------------------------------------------------------
+*/
+
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -146,6 +156,19 @@ foreach ($answers as $row) {
 $percentage = $totalMarks > 0
     ? round(($obtainedMarks / $totalMarks) * 100, 2)
     : 0;
+
+$durationSeconds = isset($attempt['duration_seconds']) && $attempt['duration_seconds'] !== null
+    ? (int)$attempt['duration_seconds']
+    : (($attempt['submitted_at'] ?? null) && ($attempt['started_at'] ?? null)
+        ? max(0, strtotime($attempt['submitted_at']) - strtotime($attempt['started_at']))
+        : 0);
+
+$timeTaken = sprintf(
+    '%02d:%02d:%02d',
+    intdiv($durationSeconds, 3600),
+    intdiv($durationSeconds % 3600, 60),
+    $durationSeconds % 60
+);
 
 ?>
 <!DOCTYPE html>
@@ -468,6 +491,27 @@ $percentage = $totalMarks > 0
             </div>
         </div>
 
+    </div>
+
+    <div class="summary">
+        <div class="summary-box">
+            <div class="number"><?= h($timeTaken) ?></div>
+            <div class="label">Time Taken (HH:MM:SS)</div>
+        </div>
+        <div class="summary-box">
+            <div class="number"><?= (int)($attempt['violation_count'] ?? 0) ?></div>
+            <div class="label">Tab-Switch Violations</div>
+        </div>
+        <div class="summary-box">
+            <div class="number" style="font-size:16px;">
+                <?= h(ucwords(str_replace('_', ' ', $attempt['submission_reason'] ?? 'Not recorded'))) ?>
+            </div>
+            <div class="label">Submission Reason</div>
+        </div>
+        <div class="summary-box">
+            <div class="number"><?= h($attempt['status']) ?></div>
+            <div class="label">Final Status</div>
+        </div>
     </div>
 
 
