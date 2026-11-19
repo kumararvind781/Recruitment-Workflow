@@ -2,48 +2,32 @@
 # You should customize this list as applicable to your project.
 # Learn more about .gitignore:
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
-
-# Database Connection
+# Database
 config/db.php
 config.php
-
-# SQL Backup Files
-database.sql
 *.sql
 
-Untracked files:
-    public/error_log
-
 # Uploads
-uploads/
-public/uploads/
-
-.htaccess
-
-# Logs
-logs/
-*.log
-
-# Cache
-cache/
+/public/uploads/
 
 # Backup Files
-backups/
 *.zip
 *.rar
 
-# Environment Files
+# Logs
+*.log
+/public/error_log
+
+# Environment
 .env
 
-# VS Code
+# IDE
 .vscode/
-
-# PhpStorm
 .idea/
 
-# Windows
+# OS
 Thumbs.db
 Desktop.ini
+.DS_Store
 
-# Mac
-.DS_Store/public/error_log
+.htaccess
