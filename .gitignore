@@ -11,6 +11,9 @@ config.php
 database.sql
 *.sql
 
+Untracked files:
+    public/error_log
+
 # Uploads
 uploads/
 public/uploads/
@@ -43,4 +46,4 @@ Thumbs.db
 Desktop.ini
 
 # Mac
-.DS_Store
+.DS_Store/public/error_log
