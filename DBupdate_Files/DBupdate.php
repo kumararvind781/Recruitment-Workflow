@@ -13,7 +13,7 @@
  *
  * Generates:
  *      db_schema.json
- *      db_updates.sql
+ *      db_updates.sql (latest run only; previous SQL is replaced)
  *
  * Detects:
  *      - New tables
@@ -679,29 +679,36 @@ foreach ($currentSchema as $table => $tableInfo) {
 
 
 /* ============================================================
-   NO CHANGES
+   NO CHANGES - CLEAR OLD SQL
    ============================================================ */
 
 if (empty($sqlParts)) {
 
+    $noChangeReport =
+        "-- DATABASE UPDATE REPORT" . PHP_EOL .
+        "-- Generated: " . date('Y-m-d H:i:s') . PHP_EOL .
+        "-- Database: {$db}" . PHP_EOL .
+        "-- Status: NO NEW CHANGES" . PHP_EOL;
+
+    // Replace the previous SQL/report so old queries are never displayed.
+    file_put_contents($sqlFile, $noChangeReport);
+
     echo PHP_EOL;
-    echo "No new database changes found." .
-        PHP_EOL;
+    echo "========================================" . PHP_EOL;
+    echo "NO NEW DATABASE CHANGES" . PHP_EOL;
+    echo "========================================" . PHP_EOL;
+    echo "Date     : " . date('d-M-Y H:i:s') . PHP_EOL;
+    echo "Database : {$db}" . PHP_EOL;
+    echo "SQL file : {$sqlFile}" . PHP_EOL;
+    echo "Old SQL  : Cleared" . PHP_EOL;
+    echo PHP_EOL;
 
     if (!empty($changes)) {
-
-        echo PHP_EOL;
-        echo "Manual review:" .
-            PHP_EOL;
-
+        echo "Manual review required:" . PHP_EOL;
         foreach ($changes as $change) {
-
-            echo "  ! {$change}" .
-                PHP_EOL;
+            echo "  ! {$change}" . PHP_EOL;
         }
     }
-
-    echo PHP_EOL;
 
     exit(0);
 }
@@ -751,10 +758,10 @@ if (!file_exists($sqlFile)) {
 }
 
 
+// Latest-only mode: replace the file instead of appending old SQL.
 file_put_contents(
     $sqlFile,
-    $block,
-    FILE_APPEND
+    $block
 );
 
 
@@ -776,31 +783,46 @@ file_put_contents(
    OUTPUT
    ============================================================ */
 
-echo PHP_EOL;
-echo "========================================" .
-    PHP_EOL;
-echo "DB changes detected and saved" .
-    PHP_EOL;
-echo "========================================" .
-    PHP_EOL;
-echo PHP_EOL;
-
+$newTableCount = 0;
+$newColumnCount = 0;
+$changedColumnCount = 0;
+$newIndexCount = 0;
+$droppedCount = 0;
 
 foreach ($changes as $change) {
-
-    echo "  + {$change}" .
-        PHP_EOL;
+    if (strpos($change, 'NEW TABLE:') === 0) {
+        $newTableCount++;
+    } elseif (strpos($change, 'NEW COLUMN:') === 0) {
+        $newColumnCount++;
+    } elseif (strpos($change, 'CHANGED COLUMN:') === 0) {
+        $changedColumnCount++;
+    } elseif (strpos($change, 'NEW INDEX:') === 0) {
+        $newIndexCount++;
+    } elseif (
+        strpos($change, 'DROPPED TABLE:') === 0 ||
+        strpos($change, 'DROPPED COLUMN:') === 0 ||
+        strpos($change, 'DROPPED INDEX:') === 0
+    ) {
+        $droppedCount++;
+    }
 }
 
-
 echo PHP_EOL;
-echo "SQL file:" .
-    PHP_EOL;
-
-echo "  {$sqlFile}" .
-    PHP_EOL;
-
+echo "========================================" . PHP_EOL;
+echo "DATABASE UPDATE GENERATED" . PHP_EOL;
+echo "========================================" . PHP_EOL;
+echo "Date             : " . date('d-M-Y H:i:s') . PHP_EOL;
+echo "Database         : {$db}" . PHP_EOL;
+echo "New tables       : {$newTableCount}" . PHP_EOL;
+echo "New columns      : {$newColumnCount}" . PHP_EOL;
+echo "Changed columns  : {$changedColumnCount}" . PHP_EOL;
+echo "New indexes      : {$newIndexCount}" . PHP_EOL;
+echo "Dropped items    : {$droppedCount}" . PHP_EOL;
+echo "Total changes    : " . count($changes) . PHP_EOL;
+echo "Status           : READY FOR REVIEW" . PHP_EOL;
 echo PHP_EOL;
-echo "Review db_updates.sql before running on LIVE." .
-    PHP_EOL;
+echo "Latest SQL file  : {$sqlFile}" . PHP_EOL;
+echo "Previous SQL     : Replaced" . PHP_EOL;
+echo PHP_EOL;
+echo "Review the SQL before running it on LIVE." . PHP_EOL;
 echo PHP_EOL;

@@ -46,6 +46,32 @@ if (!$data) {
     exit('Interview round not found');
 }
 
+// Latest exam attempt for this candidate (shown to the assigned manager).
+$examStmt = $pdo->prepare("
+    SELECT
+        id,
+        total_questions,
+        attempted_questions,
+        correct_answers,
+        wrong_answers,
+        unattempted_questions,
+        total_marks,
+        obtained_marks,
+        percentage,
+        status,
+        started_at,
+        submitted_at,
+        duration_seconds,
+        submission_reason,
+        violation_count
+    FROM exam_attempts
+    WHERE candidate_id = ?
+    ORDER BY id DESC
+    LIMIT 1
+");
+$examStmt->execute([$data['candidate_id']]);
+$examAttempt = $examStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
 $prevFeedbacks = [];
 if ((int) ($data['round_no'] ?? 1) > 1) {
     $prevFeedbackStmt = $pdo->prepare("
@@ -347,9 +373,61 @@ include __DIR__ . '/../app/views/layouts/header.php';
                             target="_blank" rel="noopener noreferrer">
                             Candidate Form
                         </a>
+
+                        
                     </td>
                 </tr>
             </table>
+
+            <?php if (strcasecmp(trim($data['position_applied'] ?? ''), 'Process Associate') === 0): ?>
+            <div class="section-title">Candidate Exam Performance</div>
+            <?php if (!$examAttempt): ?>
+                <div class="empty">No exam attempt found for this candidate.</div>
+            <?php else: ?>
+                <?php
+                $examDuration = isset($examAttempt['duration_seconds']) && $examAttempt['duration_seconds'] !== null
+                    ? gmdate('H:i:s', (int) $examAttempt['duration_seconds'])
+                    : 'Not recorded';
+
+                $examReason = $examAttempt['submission_reason'] ?? '';
+                if ($examReason === 'tab_switch_limit') {
+                    $examReasonLabel = 'Automatic Submission (2nd Tab Switch)';
+                } elseif ($examReason === 'manual') {
+                    $examReasonLabel = 'Manual Submission';
+                } else {
+                    $examReasonLabel = 'Not recorded';
+                }
+                ?>
+                <div class="stack-card">
+                    <p><strong>Exam Status:</strong> <?= h(ucfirst($examAttempt['status'] ?? '')) ?></p>
+                    <p><strong>Obtained Marks:</strong>
+                        <?= h($examAttempt['obtained_marks'] ?? '0') ?> /
+                        <?= h($examAttempt['total_marks'] ?? '0') ?>
+                    </p>
+                    <p><strong>Percentage:</strong> <?= h($examAttempt['percentage'] ?? '0') ?>%</p>
+                    <p><strong>Total Questions:</strong> <?= (int) ($examAttempt['total_questions'] ?? 0) ?></p>
+                    <p><strong>Attempted:</strong> <?= (int) ($examAttempt['attempted_questions'] ?? 0) ?></p>
+                    <p><strong>Correct Answers:</strong> <?= (int) ($examAttempt['correct_answers'] ?? 0) ?></p>
+                    <p><strong>Wrong Answers:</strong> <?= (int) ($examAttempt['wrong_answers'] ?? 0) ?></p>
+                    <p><strong>Unattempted:</strong> <?= (int) ($examAttempt['unattempted_questions'] ?? 0) ?></p>
+                    <p><strong>Time Taken:</strong> <?= h($examDuration) ?></p>
+                    <p><strong>Tab Switch Violations:</strong> <?= (int) ($examAttempt['violation_count'] ?? 0) ?> / 2</p>
+                    <p><strong>Submission Reason:</strong> <?= h($examReasonLabel) ?></p>
+                    <p><strong>Started At:</strong> <?= h($examAttempt['started_at'] ?? '-') ?></p>
+                    <p><strong>Submitted At:</strong> <?= h($examAttempt['submitted_at'] ?? '-') ?></p>
+
+                    <?php if (($examAttempt['status'] ?? '') === 'completed'): ?>
+                        <div class="btn-row">
+                            <a class="btn" href="unire_exam_paper.php?attempt_id=<?= (int) $examAttempt['id'] ?>"
+                               target="_blank" rel="noopener noreferrer">
+                                Open Full Exam Paper
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php endif; // Process Associate exam section ?>
 
             <?php if (!empty($prevFeedbacks)): ?>
                 <div class="section-title">Previous Round Feedback</div>

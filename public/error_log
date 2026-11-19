@@ -3,3 +3,109 @@ Stack trace:
 #0 /home/vinaykalra/careers.unire.co.in/recruitment-system/public/apply.php(15): PDOStatement->execute()
 #1 {main}
   thrown in /home/vinaykalra/careers.unire.co.in/recruitment-system/public/apply.php on line 15
+[05-Oct-2026 10:50:30 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY093]: Invalid parameter number in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php:105
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php(105): PDOStatement->execute()
+#1 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php on line 105
+[05-Oct-2026 10:51:05 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY093]: Invalid parameter number in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php:105
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php(105): PDOStatement->execute()
+#1 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php on line 105
+[05-Oct-2026 10:51:30 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY093]: Invalid parameter number in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php:105
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php(105): PDOStatement->execute()
+#1 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php on line 105
+[05-Oct-2026 10:51:37 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY093]: Invalid parameter number in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php:105
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php(105): PDOStatement->execute()
+#1 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidates.php on line 105
+[03-Nov-2026 12:17:52 UTC] PHP Warning:  move_uploaded_file(/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708272_b179d511_Deep New CV..pdf): Failed to open stream: No such file or directory in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:17:52 UTC] PHP Warning:  move_uploaded_file(): Unable to move '/tmp/phpJFFxr2' to '/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708272_b179d511_Deep New CV..pdf' in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:18:27 UTC] PHP Warning:  move_uploaded_file(/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708307_77c04907_Deep New CV..pdf): Failed to open stream: No such file or directory in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:18:27 UTC] PHP Warning:  move_uploaded_file(): Unable to move '/tmp/phpRWLvUX' to '/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708307_77c04907_Deep New CV..pdf' in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:20:14 UTC] PHP Warning:  move_uploaded_file(/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708414_0f5b2f0c_DeepNewCV.pdf): Failed to open stream: No such file or directory in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:20:14 UTC] PHP Warning:  move_uploaded_file(): Unable to move '/tmp/phpL5Irx9' to '/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708414_0f5b2f0c_DeepNewCV.pdf' in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:20:34 UTC] PHP Warning:  move_uploaded_file(/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708434_142035c0_DeepNewCV.pdf): Failed to open stream: No such file or directory in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[03-Nov-2026 12:20:34 UTC] PHP Warning:  move_uploaded_file(): Unable to move '/tmp/phpA0a11Q' to '/home/vinaykalra/repositories/Recruitment-Workflow/public/uploads/resume/1793708434_142035c0_DeepNewCV.pdf' in /home/vinaykalra/repositories/Recruitment-Workflow/public/recruiter-candidate.php on line 313
+[17-Nov-2026 21:29:01 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[17-Nov-2026 23:56:14 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:08:31 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:08:46 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:08:51 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:08:52 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:09:03 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:19:54 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:19:58 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:22:11 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 04:44:33 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 05:08:53 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23
+[18-Nov-2026 05:08:56 UTC] PHP Fatal error:  Uncaught PDOException: could not find driver in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php:23
+Stack trace:
+#0 /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php(23): PDO->__construct()
+#1 /home/vinaykalra/repositories/Recruitment-Workflow/public/login.php(10): Database::connect()
+#2 {main}
+  thrown in /home/vinaykalra/repositories/Recruitment-Workflow/app/config/database.php on line 23

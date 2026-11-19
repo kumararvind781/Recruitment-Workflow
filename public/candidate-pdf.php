@@ -29,6 +29,32 @@ if (!$candidate) {
     exit('Candidate not found');
 }
 
+// Latest exam attempt for this candidate.
+$examStmt = $pdo->prepare("
+    SELECT
+        id,
+        total_questions,
+        attempted_questions,
+        correct_answers,
+        wrong_answers,
+        unattempted_questions,
+        total_marks,
+        obtained_marks,
+        percentage,
+        status,
+        started_at,
+        submitted_at,
+        duration_seconds,
+        submission_reason,
+        violation_count
+    FROM exam_attempts
+    WHERE candidate_id = ?
+    ORDER BY id DESC
+    LIMIT 1
+");
+$examStmt->execute([$id]);
+$examAttempt = $examStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
 $academicStmt = $pdo->prepare("SELECT * FROM candidate_academics WHERE candidate_id = ? ORDER BY id ASC");
 $academicStmt->execute([$id]);
 $academics = $academicStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -351,6 +377,44 @@ ob_start();
         }, 3); ?>
     </tbody>
 </table>
+
+<?php if (strcasecmp(trim($candidate['position_applied'] ?? ''), 'Process Associate') === 0): ?>
+<h2>Exam Details</h2>
+<?php if (!$examAttempt): ?>
+    <p>No exam attempt found.</p>
+<?php else: ?>
+    <?php
+    $examDuration = isset($examAttempt['duration_seconds']) && $examAttempt['duration_seconds'] !== null
+        ? gmdate('H:i:s', (int) $examAttempt['duration_seconds'])
+        : 'Not recorded';
+
+    $examReason = $examAttempt['submission_reason'] ?? '';
+    if ($examReason === 'tab_switch_limit') {
+        $examReasonLabel = 'Automatic Submission (2nd Tab Switch)';
+    } elseif ($examReason === 'manual') {
+        $examReasonLabel = 'Manual Submission';
+    } else {
+        $examReasonLabel = 'Not recorded';
+    }
+    ?>
+    <table class="two-col">
+        <tr><td>Exam Status</td><td><?= e(ucfirst($examAttempt['status'] ?? '')) ?></td></tr>
+        <tr><td>Time Taken</td><td><?= e($examDuration) ?></td></tr>
+        <tr><td>Total Questions</td><td><?= (int) ($examAttempt['total_questions'] ?? 0) ?></td></tr>
+        <tr><td>Attempted</td><td><?= (int) ($examAttempt['attempted_questions'] ?? 0) ?></td></tr>
+        <tr><td>Correct Answers</td><td><?= (int) ($examAttempt['correct_answers'] ?? 0) ?></td></tr>
+        <tr><td>Wrong Answers</td><td><?= (int) ($examAttempt['wrong_answers'] ?? 0) ?></td></tr>
+        <tr><td>Unattempted</td><td><?= (int) ($examAttempt['unattempted_questions'] ?? 0) ?></td></tr>
+        <tr><td>Percentage</td><td><?= e($examAttempt['percentage'] ?? '0') ?>%</td></tr>
+        <tr><td>Obtained Marks</td><td><?= e($examAttempt['obtained_marks'] ?? '0') ?> / <?= e($examAttempt['total_marks'] ?? '0') ?></td></tr>
+        <tr><td>Tab Switch Violations</td><td><?= (int) ($examAttempt['violation_count'] ?? 0) ?> / 2</td></tr>
+        <tr><td>Submission Reason</td><td><?= e($examReasonLabel) ?></td></tr>
+        <tr><td>Started At</td><td><?= e($examAttempt['started_at'] ?? '-') ?></td></tr>
+        <tr><td>Submitted At</td><td><?= e($examAttempt['submitted_at'] ?? '-') ?></td></tr>
+    </table>
+<?php endif; ?>
+
+<?php endif; // Process Associate exam section ?>
 
 <h2>Interview Rounds</h2>
 <table>
