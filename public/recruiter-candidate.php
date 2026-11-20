@@ -112,39 +112,41 @@ $isProcessAssociate =
 
 /*
 |--------------------------------------------------------------------------
-| Generate Process Associate Exam Login
+| 
+/*
+|--------------------------------------------------------------------------
+| Generate / Regenerate Process Associate Exam Login
 |--------------------------------------------------------------------------
 */
+
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
-    && ($_POST['form_type'] ?? '') === 'generate_exam_login'
+    && in_array(
+        $_POST['form_type'] ?? '',
+        ['generate_exam_login', 'regenerate_exam_password'],
+        true
+    )
 ) {
+    $action = $_POST['form_type'];
+
     if (!$isProcessAssociate) {
         $examLoginError = 'Exam login is only available for Process Associate.';
     } else {
         try {
-            // Check whether login already exists.
+
+            // Check existing exam login.
             $stmt = $pdo->prepare("
                 SELECT *
                 FROM exam_access
                 WHERE candidate_id = ?
                 LIMIT 1
             ");
+
             $stmt->execute([$candidate['id']]);
             $existingAccess = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if ($existingAccess) {
-                // Do not create another login.
-                $examAccess = $existingAccess;
-                $generatedExamUsername = $existingAccess['username'];
-                $showExamLoginModal = true;
-            } else {
-                // Random username.
-                $username = 'PA-' . strtoupper(
-                    substr(bin2hex(random_bytes(4)), 0, 6)
-                );
-
-                // Random password.
+            // Secure random password generator.
+            $generatePassword = function () {
                 $characters =
                     'ABCDEFGHJKLMNPQRSTUVWXYZ' .
                     'abcdefghijkmnopqrstuvwxyz' .
@@ -158,48 +160,123 @@ if (
                     $password .= $characters[random_int(0, $max)];
                 }
 
+                return $password;
+            };
+
+            // REGENERATE PASSWORD
+            if ($action === 'regenerate_exam_password') {
+
+                if (!$existingAccess) {
+                    throw new Exception('Exam login does not exist. Generate login first.');
+                }
+
+                // Keep existing username.
+                $username = $existingAccess['username'];
+
+                // Generate new password.
+                $password = $generatePassword();
+
                 $passwordHash = password_hash(
                     $password,
                     PASSWORD_DEFAULT
                 );
 
+                // Update only password hash.
                 $stmt = $pdo->prepare("
-                    INSERT INTO exam_access
-                    (
-                        candidate_id,
-                        username,
-                        password_hash,
-                        is_active
-                    )
-                    VALUES
-                    (
-                        ?,
-                        ?,
-                        ?,
-                        1
-                    )
+                    UPDATE exam_access
+                    SET password_hash = ?
+                    WHERE candidate_id = ?
                 ");
 
                 $stmt->execute([
-                    $candidate['id'],
-                    $username,
-                    $passwordHash
+                    $passwordHash,
+                    $candidate['id']
                 ]);
 
-                $examAccess = [
-                    'username' => $username,
-                    'is_active' => 1
-                ];
+                $examAccess = $existingAccess;
 
                 $generatedExamUsername = $username;
                 $generatedExamPassword = $password;
+
+                $examLoginModalTitle = 'Exam Password Regenerated';
+                $examLoginModalMessage = 'New password generated successfully. Please copy and save it now.';
+
                 $showExamLoginModal = true;
+
             }
+
+            // GENERATE LOGIN
+            else {
+
+                if ($existingAccess) {
+
+                    // Existing login: show username only.
+                    $examAccess = $existingAccess;
+
+                    $generatedExamUsername = $existingAccess['username'];
+
+                    $generatedExamPassword = null;
+
+                    $examLoginModalTitle = 'Exam Login Already Exists';
+                    $examLoginModalMessage = 'This login was already generated earlier. The password cannot be displayed again.';
+
+                    $showExamLoginModal = true;
+
+                } else {
+
+                    // Generate username.
+                    $username = 'PA-' . strtoupper(
+                        substr(bin2hex(random_bytes(4)), 0, 6)
+                    );
+
+                    // Generate password.
+                    $password = $generatePassword();
+
+                    $passwordHash = password_hash(
+                        $password,
+                        PASSWORD_DEFAULT
+                    );
+
+                    $stmt = $pdo->prepare("
+                        INSERT INTO exam_access
+                        (
+                            candidate_id,
+                            username,
+                            password_hash,
+                            is_active
+                        )
+                        VALUES (?, ?, ?, 1)
+                    ");
+
+                    $stmt->execute([
+                        $candidate['id'],
+                        $username,
+                        $passwordHash
+                    ]);
+
+                    $examAccess = [
+                        'username' => $username,
+                        'is_active' => 1
+                    ];
+
+                    $generatedExamUsername = $username;
+                    $generatedExamPassword = $password;
+
+                    $examLoginModalTitle = 'Exam Login Generated';
+                    $examLoginModalMessage = 'Please copy and save the username and password. The password will not be displayed again.';
+
+                    $showExamLoginModal = true;
+                }
+            }
+
         } catch (Throwable $e) {
-            $examLoginError = 'Unable to generate exam login: ' . $e->getMessage();
+
+            $examLoginError = 'Unable to process exam login: ' . $e->getMessage();
+
         }
     }
 }
+
 
 /*
 |--------------------------------------------------------------------------
@@ -1158,62 +1235,64 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
     }
 
     .exam-detail-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 18px;
-}
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+    }
 
-.exam-detail-item {
-    background: #fcfafc;
-    border: 1px solid #eadfeb;
-    border-radius: 12px;
-    padding: 14px 16px;
-    min-width: 0;
-}
+    .exam-detail-item {
+        background: #fcfafc;
+        border: 1px solid #eadfeb;
+        border-radius: 12px;
+        padding: 14px 16px;
+        min-width: 0;
+    }
 
-.exam-detail-item .exam-label {
-    display: block;
-    font-size: 12px;
-    font-weight: 700;
-    color: #887a97;
-    text-transform: uppercase;
-    margin-bottom: 7px;
-}
+    .exam-detail-item .exam-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #887a97;
+        text-transform: uppercase;
+        margin-bottom: 7px;
+    }
 
-.exam-detail-item .exam-value {
-    display: block;
-    font-size: 16px;
-    font-weight: 600;
-    color: #30263c;
-    overflow-wrap: anywhere;
-}
-
-.exam-detail-item.reason {
-    grid-column: span 2;
-}
-
-.exam-detail-item.reason .exam-value {
-    color: #b52b80;
-}
-
-.exam-detail-item.status .exam-value {
-    color: #16834a;
-}
-
-.exam-detail-actions {
-    margin-top: 20px;
-}
-
-@media(max-width: 650px) {
-    .exam-detail-grid {
-        grid-template-columns: 1fr;
+    .exam-detail-item .exam-value {
+        display: block;
+        font-size: 16px;
+        font-weight: 600;
+        color: #30263c;
+        overflow-wrap: anywhere;
     }
 
     .exam-detail-item.reason {
-        grid-column: span 1;
+        grid-column: span 2;
     }
-}
+
+    .exam-detail-item.reason .exam-value {
+        color: #b52b80;
+    }
+
+    .exam-detail-item.status .exam-value {
+        color: #16834a;
+    }
+
+    .exam-detail-actions {
+        margin-top: 20px;
+    }
+
+    @media(max-width: 650px) {
+        .exam-detail-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .exam-detail-item.reason {
+            grid-column: span 1;
+        }
+    }
+
+    /* final colum css */
 </style>
 
 <div class="container">
@@ -1279,17 +1358,33 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
 
             <?php if ($isProcessAssociate): ?>
 
-                <form method="POST" style="display:inline;">
 
-                    <input type="hidden" name="form_type" value="generate_exam_login">
+                <div style="display:flex; flex-direction:column; align-items:flex-start; gap:10px;">
 
-                    <?= csrf_field() ?>
+                    <!-- Generate Exam Login -->
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="generate_exam_login">
 
-                    <button type="submit" class="btn">
-                        Generate Exam Login
-                    </button>
+                        <?= csrf_field() ?>
 
-                </form>
+                        <button type="submit" class="btn">
+                            Generate Exam Login
+                        </button>
+                    </form>
+
+                    <!-- Regenerate Password -->
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="regenerate_exam_password">
+
+                        <?= csrf_field() ?>
+
+                        <button type="submit" class="btn"
+                            onclick="return confirm('Regenerate password? The old password will stop working immediately.');">
+                            Regenerate Password
+                        </button>
+                    </form>
+
+                </div>
 
             <?php endif; ?>
 
@@ -1301,29 +1396,65 @@ function field_value($isEditMode, $name, $value, $type = 'text', $options = [])
             <span class="status-badge"><?= h($status) ?></span>
         </div> -->
 
-        <div class="sum-card">
-            <small>Final Decision</small>
-            <strong><?= h($candidate['final_decision'] ?? 'pending') ?></strong>
 
-            <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
-                <?php if ($isEditMode): ?>
-                    <button class="btn btn-green" type="submit" form="candidateEditForm">Save Changes</button>
-                    <a class="btn btn-red" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>">Cancel</a>
-                <?php else: ?>
-                    <a class="btn btn-pink" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>&edit=1">Edit
-                        Candidate</a>
-                <?php endif; ?>
 
-                <?php if (($candidate['final_decision'] ?? 'pending') === 'pending' && !$isEditMode): ?>
-                    <a class="btn btn-orange" href="recruiter-candidate-action.php?id=<?= (int) $candidate['id'] ?>">Take
-                        Action</a>
-                <?php endif; ?>
+        <div class="sum-card" style="display:flex;
+            flex-direction:column;
+            align-items:flex-start;
+            justify-content:center;
+            gap:18px;
+            height:auto;
+            min-height:0;
+            padding:24px;
+            box-sizing:border-box;">
 
+            <!-- Status Row -->
+            <div style="display:flex; align-items:center; gap:15px; width:100%;">
+
+                <small style="font-size:15px; color:#85809a;">
+                    Final Decision
+                </small>
+
+                <strong style="font-size:21px; color:#29243b;">
+                    <?= h($candidate['final_decision'] ?? 'pending') ?>
+                </strong>
 
             </div>
 
+            <!-- Action Buttons Row -->
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+
+                <?php if ($isEditMode): ?>
+
+                    <button class="btn btn-green" type="submit" form="candidateEditForm">
+                        Save Changes
+                    </button>
+
+                    <a class="btn btn-red" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>">
+                        Cancel
+                    </a>
+
+                <?php else: ?>
+
+                    <a class="btn btn-pink" href="recruiter-candidate.php?id=<?= (int) $candidate['id'] ?>&edit=1">
+                        Edit Candidate
+                    </a>
+
+                <?php endif; ?>
+
+                <?php if (($candidate['final_decision'] ?? 'pending') === 'pending' && !$isEditMode): ?>
+
+                    <a class="btn btn-orange" href="recruiter-candidate-action.php?id=<?= (int) $candidate['id'] ?>">
+                        Take Action
+                    </a>
+
+                <?php endif; ?>
+
+            </div>
 
         </div>
+
+
     </div>
 
     <?php if ($isEditMode): ?>

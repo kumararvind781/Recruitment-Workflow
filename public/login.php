@@ -683,7 +683,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div class="actions">
                         <button type="submit">Login</button>
-                        <a href="<?= BASE_URL ?>public/password_reset.php">Reset Password</a>
+                        <a href="<?= BASE_URL ?>public/reset_pwd.php">Reset Password</a>
                     </div>
                 </form>
                 <p class="card-note">Secure access for authorised recruitment team members.</p>

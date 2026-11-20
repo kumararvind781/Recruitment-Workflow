@@ -2,9 +2,13 @@
 <?php
 
 /* Base URL */
-if ($_SERVER['HTTP_HOST'] == 'localhost') {
+$host = $_SERVER['HTTP_HOST'] ?? '';
+$host = explode(':', $host)[0];
 
-    define('BASE_URL', '/recruitment-workflow/');
+/* Local Access: localhost or Laptop LAN IP */
+if (in_array($host, ['localhost', '127.0.0.1', '192.168.1.60'])) {
+
+    define('BASE_URL', '/Recruitment-Workflow/');
 
     // Local Database
     define('DB_HOST', 'localhost');
